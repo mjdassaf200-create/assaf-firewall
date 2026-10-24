@@ -205,7 +205,14 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        sectionTitle(appsHeader, tr("YOUR APPLICATIONS", "تطبيقاتك"))
+        appsHeader.addView(TextView(this).apply {
+            text = tr("YOUR APPLICATIONS", "تطبيقاتك")
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = 0.07f
+            setTextColor(muted)
+            setPadding(0, dp(20), 0, dp(9))
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         countText = TextView(this).apply {
             text = "0"
             textSize = 12f
