@@ -88,7 +88,7 @@ class MainActivity : Activity() {
         root.addView(statsText, wrap())
         searchBox = EditText(this).apply {
             hint = tr("Search apps…", "ابحث عن تطبيق…")
-            singleLine = true
+            setSingleLine(true)
             addTextChangedListener(SimpleTextWatcher { filterApps(it) })
         }
         root.addView(searchBox, wrap())
