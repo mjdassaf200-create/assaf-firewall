@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application android:allowBackup="false" android:label="ASSAF Firewall" android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
@@ -11,5 +12,11 @@
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Local VPN firewall blocking traffic for apps selected by the user" />
             <intent-filter><action android:name="android.net.VpnService" /></intent-filter>
         </service>
+        <receiver android:name=".ScheduleReceiver" android:exported="false">
+            <intent-filter><action android:name="com.mrassaf.firewall.SCHEDULE_TICK" /></intent-filter>
+        </receiver>
+        <receiver android:name=".BootReceiver" android:enabled="true" android:exported="false">
+            <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
+        </receiver>
     </application>
 </manifest>
