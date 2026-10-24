@@ -26,9 +26,13 @@ class FirewallVpnService : VpnService() {
         try {
             tunnel?.close()
             val builder = Builder().setSession("ASSAF Firewall")
-                .setMtu(1500).addAddress("10.111.0.1", 32)
+                .setMtu(1500)
+                .addAddress("10.111.0.1", 32)
                 .addRoute("0.0.0.0", 0)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.addRoute("::", 0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                builder.addAddress("fd00:111::1", 128)
+                builder.addRoute("::", 0)
+            }
             selected.forEach { builder.addAllowedApplication(it) }
             tunnel = builder.establish()
             if (tunnel == null) { Log.e(TAG, "VPN tunnel could not be established"); stopSelf() }
