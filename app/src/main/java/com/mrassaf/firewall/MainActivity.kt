@@ -313,7 +313,7 @@ class MainActivity : Activity() {
         }, wrap())
 
         root.addView(TextView(this).apply {
-            text = "Developer: Eng. Azmi Assaf"
+            text = "Developer: M. Azmi .Assaf"
             textSize = 13f
             gravity = Gravity.CENTER
             typeface = Typeface.DEFAULT_BOLD
