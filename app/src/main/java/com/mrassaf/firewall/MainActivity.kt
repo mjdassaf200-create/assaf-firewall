@@ -340,17 +340,19 @@ class MainActivity : Activity() {
                 setTextColor(white)
                 maxLines = 2
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            row.addView(CheckBox(this).apply {
-                isChecked = selected.contains(app.packageName)
-                buttonTintList = ColorStateList.valueOf(blue)
-                setOnCheckedChangeListener { _, checked ->
-                    val updated = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty().toMutableSet()
-                    if (checked) updated.add(app.packageName) else updated.remove(app.packageName)
-                    prefs.edit().putStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, updated).apply()
-                    statusText.text = tr("${updated.size} apps selected", "التطبيقات المحددة: ${updated.size}")
-                    countText.text = updated.size.toString()
-                }
-            })
+            val stateLabel = TextView(this).apply {
+                text = if (selected.contains(app.packageName)) tr("BLOCKED", "محجوب") else tr("ALLOWED", "متصل")
+                textSize = 10f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(if (selected.contains(app.packageName)) Color.rgb(255, 153, 153) else green)
+                background = rounded(if (selected.contains(app.packageName)) Color.rgb(75, 35, 48) else Color.rgb(20, 65, 58), 10)
+                setPadding(dp(9), dp(7), dp(9), dp(7))
+            }
+            row.addView(stateLabel)
+            row.isClickable = true
+            row.isFocusable = true
+            row.setOnClickListener { confirmAppConnection(app.packageName, packageManager.getApplicationLabel(app).toString()) }
             val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             params.bottomMargin = dp(7)
             appRows.add(app.packageName to row)
@@ -365,6 +367,34 @@ class MainActivity : Activity() {
                 setPadding(dp(12), dp(18), dp(12), dp(18))
             }, wrap())
         }
+    }
+
+    private fun confirmAppConnection(packageName: String, appName: String) {
+        val blocked = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty().contains(packageName)
+        val title = if (blocked) tr("Restore internet connection?", "معاودة الاتصال بالإنترنت؟")
+                    else tr("Stop internet connection?", "إيقاف الاتصال بالإنترنت؟")
+        val message = if (blocked) tr("Allow $appName to access the internet again?", "هل تريد السماح لتطبيق $appName بالاتصال بالإنترنت من جديد؟")
+                      else tr("Block internet access for $appName?", "هل تريد إيقاف اتصال تطبيق $appName بالإنترنت؟")
+        android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setNegativeButton(tr("Cancel", "إلغاء"), null)
+            .setPositiveButton(if (blocked) tr("Reconnect", "معاودة الاتصال") else tr("Block internet", "إيقاف الاتصال")) { _, _ ->
+                val updated = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty().toMutableSet()
+                if (blocked) updated.remove(packageName) else updated.add(packageName)
+                prefs.edit().putStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, updated).apply()
+                loadApps()
+                if (updated.isEmpty()) {
+                    startService(Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
+                } else if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
+                    val serviceIntent = Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_START)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
+                }
+                val toastText = if (blocked) tr("Internet connection restored for $appName", "تمت معاودة اتصال $appName بالإنترنت")
+                                 else tr("Internet blocked for $appName", "تم إيقاف اتصال $appName بالإنترنت")
+                Toast.makeText(this, toastText, Toast.LENGTH_LONG).show()
+            }
+            .show()
     }
 
     private fun filterApps(query: String) {
