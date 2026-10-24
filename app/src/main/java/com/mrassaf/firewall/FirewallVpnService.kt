@@ -46,6 +46,7 @@ class FirewallVpnService : VpnService() {
                 stopFirewall()
                 return
             }
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_FIREWALL_ACTIVE, true).apply()
             // Read and intentionally discard packets, so selected apps cannot reach the network.
             reading.set(true)
             readerThread = thread(name = "ASSAF-VPN-dropper", isDaemon = true) {
@@ -81,6 +82,7 @@ class FirewallVpnService : VpnService() {
     }
 
     private fun stopFirewall() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_FIREWALL_ACTIVE, false).apply()
         stopTunnelOnly()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -110,6 +112,7 @@ class FirewallVpnService : VpnService() {
         const val KEY_BLOCKED_PACKAGES = "blocked_packages"
         const val KEY_BLOCKED_BYTES = "blocked_bytes"
         const val KEY_BLOCKED_PACKETS = "blocked_packets"
+        const val KEY_FIREWALL_ACTIVE = "firewall_active"
         private const val NOTIFICATION_ID = 7001
         private const val TAG = "ASSAF"
     }
