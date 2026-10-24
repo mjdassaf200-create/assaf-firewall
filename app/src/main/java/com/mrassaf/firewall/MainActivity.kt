@@ -229,7 +229,7 @@ class MainActivity : Activity() {
         searchBox = EditText(this).apply {
             hint = tr("Search installed apps", "ابحث عن تطبيق مثبت")
             setSingleLine(true)
-            textSize = 14f
+            textSize = 15f
             setTextColor(white)
             setHintTextColor(muted)
             background = rounded(panel, 13)
@@ -311,6 +311,30 @@ class MainActivity : Activity() {
             setLineSpacing(dp(3).toFloat(), 1f)
             setPadding(dp(8), dp(18), dp(8), 0)
         }, wrap())
+
+        root.addView(TextView(this).apply {
+            text = "Developer: Eng. Azmi Assaf"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(white)
+            setPadding(dp(8), dp(20), dp(8), dp(4))
+        }, wrap())
+        root.addView(TextView(this).apply {
+            text = "mjdassaf200@gmail.com"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(blue)
+            setPadding(dp(8), 0, dp(8), dp(12))
+            setOnClickListener {
+                val intent = Intent(Intent.ACTION_SENDTO).apply {
+                    data = android.net.Uri.parse("mailto:mjdassaf200@gmail.com")
+                    putExtra(Intent.EXTRA_SUBJECT, "MR. ASSAF App")
+                }
+                runCatching { startActivity(intent) }
+                    .onFailure { Toast.makeText(this@MainActivity, "No email app found", Toast.LENGTH_SHORT).show() }
+            }
+        }, wrap())
         setContentView(scroll)
     }
 
@@ -331,18 +355,18 @@ class MainActivity : Activity() {
             runCatching { packageManager.getApplicationIcon(app) }.getOrNull()?.let { icon ->
                 row.addView(android.widget.ImageView(this).apply {
                     setImageDrawable(icon)
-                    layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(10) }
+                    layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(12) }
                 })
             }
             row.addView(TextView(this).apply {
                 text = packageManager.getApplicationLabel(app)
-                textSize = 14f
+                textSize = 16f
                 setTextColor(white)
                 maxLines = 2
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             val stateLabel = TextView(this).apply {
                 text = if (selected.contains(app.packageName)) tr("BLOCKED", "محجوب") else tr("ALLOWED", "متصل")
-                textSize = 10f
+                textSize = 11f
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 setTextColor(if (selected.contains(app.packageName)) Color.rgb(255, 153, 153) else green)
