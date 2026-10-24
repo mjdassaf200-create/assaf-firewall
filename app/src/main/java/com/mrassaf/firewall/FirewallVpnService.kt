@@ -8,9 +8,14 @@ import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import java.io.FileInputStream
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 
 class FirewallVpnService : VpnService() {
     private var tunnel: ParcelFileDescriptor? = null
+    private var readerThread: Thread? = null
+    private val reading = AtomicBoolean(false)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) stopFirewall() else startFirewall()
@@ -21,10 +26,10 @@ class FirewallVpnService : VpnService() {
         val selected = getSharedPreferences(PREFS, MODE_PRIVATE)
             .getStringSet(KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
             .filter { it != packageName }.toSet()
-        if (selected.isEmpty()) { stopSelf(); return }
+        if (selected.isEmpty()) { stopFirewall(); return }
         startForeground(NOTIFICATION_ID, buildNotification())
         try {
-            tunnel?.close()
+            stopTunnelOnly()
             val builder = Builder().setSession("ASSAF Firewall")
                 .setMtu(1500)
                 .addAddress("10.111.0.1", 32)
@@ -35,18 +40,48 @@ class FirewallVpnService : VpnService() {
             }
             selected.forEach { builder.addAllowedApplication(it) }
             tunnel = builder.establish()
-            if (tunnel == null) { Log.e(TAG, "VPN tunnel could not be established"); stopSelf() }
-            // Packets from selected apps are intentionally not forwarded: their traffic is blocked.
-            // Unselected apps are outside this per-app VPN and retain normal network access.
+            val established = tunnel
+            if (established == null) {
+                Log.e(TAG, "VPN tunnel could not be established")
+                stopFirewall()
+                return
+            }
+            // Read and intentionally discard packets, so selected apps cannot reach the network.
+            reading.set(true)
+            readerThread = thread(name = "ASSAF-VPN-dropper", isDaemon = true) {
+                val buffer = ByteArray(32767)
+                try {
+                    FileInputStream(established.fileDescriptor).use { input ->
+                        while (reading.get()) {
+                            val count = input.read(buffer)
+                            if (count > 0) {
+                                val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+                                prefs.edit()
+                                    .putLong(KEY_BLOCKED_BYTES, prefs.getLong(KEY_BLOCKED_BYTES, 0L) + count)
+                                    .putLong(KEY_BLOCKED_PACKETS, prefs.getLong(KEY_BLOCKED_PACKETS, 0L) + 1L)
+                                    .apply()
+                            } else if (count < 0) break
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (reading.get()) Log.w(TAG, "VPN packet reader stopped", e)
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Unable to start firewall", e)
-            stopSelf()
+            stopFirewall()
         }
     }
 
-    private fun stopFirewall() {
+    private fun stopTunnelOnly() {
+        reading.set(false)
         try { tunnel?.close() } catch (_: Exception) {}
         tunnel = null
+        readerThread = null
+    }
+
+    private fun stopFirewall() {
+        stopTunnelOnly()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -66,17 +101,15 @@ class FirewallVpnService : VpnService() {
     }
 
     override fun onRevoke() { stopFirewall(); super.onRevoke() }
-    override fun onDestroy() {
-        try { tunnel?.close() } catch (_: Exception) {}
-        tunnel = null
-        super.onDestroy()
-    }
+    override fun onDestroy() { stopTunnelOnly(); super.onDestroy() }
 
     companion object {
         const val ACTION_START = "com.mrassaf.firewall.START"
         const val ACTION_STOP = "com.mrassaf.firewall.STOP"
         const val PREFS = "assaf_settings"
         const val KEY_BLOCKED_PACKAGES = "blocked_packages"
+        const val KEY_BLOCKED_BYTES = "blocked_bytes"
+        const val KEY_BLOCKED_PACKETS = "blocked_packets"
         private const val NOTIFICATION_ID = 7001
         private const val TAG = "ASSAF"
     }
