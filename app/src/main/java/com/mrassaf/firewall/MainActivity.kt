@@ -342,10 +342,10 @@ class MainActivity : Activity() {
 
         root.addView(TextView(this).apply {
             text = tr(
-                "VPN-based filtering • Private by design
-Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app.",
-                "تصفية عبر VPN • خصوصية من التصميم
-أندرويد لا يسمح للتطبيق العادي بإطفاء الواي فاي أو بيانات الهاتف لكل تطبيق."
+                """VPN-based filtering • Private by design
+Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app.""",
+                """تصفية عبر VPN • خصوصية من التصميم
+أندرويد لا يسمح للتطبيق العادي بإطفاء الواي فاي أو بيانات الهاتف لكل تطبيق."""
             )
             textSize = 11f
             gravity = Gravity.CENTER
@@ -607,16 +607,16 @@ Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app.",
         val rx = android.net.TrafficStats.getTotalRxBytes().coerceAtLeast(0L)
         val tx = android.net.TrafficStats.getTotalTxBytes().coerceAtLeast(0L)
         statsText.text = tr(
-            "BLOCKED TRAFFIC
+            """BLOCKED TRAFFIC
 ${formatBytes(blockedBytes)}  •  ${packets} packets
 
 DEVICE NETWORK USAGE
-↓ ${formatBytes(rx)} received     ↑ ${formatBytes(tx)} sent",
-            "الحركة المحجوبة
+↓ ${formatBytes(rx)} received     ↑ ${formatBytes(tx)} sent""",
+            """الحركة المحجوبة
 ${formatBytes(blockedBytes)}  •  ${packets} حزمة
 
 استخدام شبكة الجهاز
-↓ ${formatBytes(rx)} استقبال     ↑ ${formatBytes(tx)} إرسال"
+↓ ${formatBytes(rx)} استقبال     ↑ ${formatBytes(tx)} إرسال"""
         )
     }
 
