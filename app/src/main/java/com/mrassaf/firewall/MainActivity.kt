@@ -35,7 +35,7 @@ class MainActivity : Activity() {
     private lateinit var cloudStatusText: TextView
     private val prefs by lazy { getSharedPreferences(FirewallVpnService.PREFS, MODE_PRIVATE) }
     private var pendingStart = false
-    private var arabic = false
+    private var arabic = true
     private var startHour = 22
     private var startMinute = 0
     private var endHour = 7
@@ -52,7 +52,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        arabic = prefs.getBoolean(KEY_ARABIC, false)
+        arabic = prefs.getBoolean(KEY_ARABIC, true)
         startHour = prefs.getInt(KEY_START_HOUR, 22)
         startMinute = prefs.getInt(KEY_START_MINUTE, 0)
         endHour = prefs.getInt(KEY_END_HOUR, 7)
