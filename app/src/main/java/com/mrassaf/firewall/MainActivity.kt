@@ -20,6 +20,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.text.InputType
 import java.util.Locale
 
 class MainActivity : Activity() {
@@ -31,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var startTimeButton: Button
     private lateinit var endTimeButton: Button
     private lateinit var countText: TextView
+    private lateinit var cloudStatusText: TextView
     private val prefs by lazy { getSharedPreferences(FirewallVpnService.PREFS, MODE_PRIVATE) }
     private var pendingStart = false
     private var arabic = false
@@ -284,6 +286,46 @@ class MainActivity : Activity() {
         scheduleParams.topMargin = dp(8)
         root.addView(scheduleCard, scheduleParams)
 
+        sectionTitle(root, tr("ASSAF CLOUD ACCOUNT", "حساب ASSAF السحابي"))
+        val cloudCard = card(panel).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(14))
+        }
+        cloudStatusText = TextView(this).apply {
+            text = if (prefs.getString(KEY_API_TOKEN, null).isNullOrBlank())
+                tr("Not signed in • Settings stay on this device", "لم يتم تسجيل الدخول • الإعدادات محفوظة على الجهاز")
+            else tr("Signed in • ASSAF cloud connected", "تم تسجيل الدخول • اتصال ASSAF السحابي")
+            textSize = 13f
+            setTextColor(white)
+        }
+        cloudCard.addView(cloudStatusText, wrap())
+        val accountButton = primaryButton(tr("Sign in / Create account", "تسجيل الدخول / إنشاء حساب"))
+        accountButton.setOnClickListener { showAccountDialog() }
+        val accountParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))
+        accountParams.topMargin = dp(10)
+        cloudCard.addView(accountButton, accountParams)
+        val healthButton = smallButton().apply {
+            text = tr("Check server connection", "فحص اتصال السيرفر")
+            setOnClickListener {
+                cloudStatusText.text = tr("Checking server…", "جارٍ فحص السيرفر…")
+                Thread {
+                    val result = runCatching { AssafApiClient.checkHealth() }
+                    runOnUiThread {
+                        cloudStatusText.text = result.fold(
+                            { tr("Server reachable • API healthy", "السيرفر متصل • واجهة API تعمل") },
+                            { tr("Connection failed: " + (it.message ?: "unknown error"), "فشل الاتصال: " + (it.message ?: "خطأ غير معروف")) }
+                        )
+                    }
+                }.start()
+            }
+        }
+        val healthParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46))
+        healthParams.topMargin = dp(7)
+        cloudCard.addView(healthButton, healthParams)
+        val cloudParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        cloudParams.topMargin = dp(8)
+        root.addView(cloudCard, cloudParams)
+
         sectionTitle(root, tr("FIREWALL CONTROLS", "التحكم بالحماية"))
         val apply = primaryButton(tr("Apply & start protection", "تطبيق وبدء الحماية"))
         apply.setOnClickListener { requestVpnAndStart() }
@@ -336,6 +378,92 @@ class MainActivity : Activity() {
             }
         }, wrap())
         setContentView(scroll)
+    }
+
+    private fun showAccountDialog() {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        val emailInput = EditText(this).apply {
+            hint = tr("Email address", "البريد الإلكتروني")
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            setSingleLine(true)
+        }
+        val passwordInput = EditText(this).apply {
+            hint = tr("Password (10+ characters for new accounts)", "كلمة المرور (10 أحرف على الأقل للحساب الجديد)")
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        val registerCheck = CheckBox(this).apply {
+            text = tr("Create a new account", "إنشاء حساب جديد")
+            setTextColor(white)
+        }
+        form.addView(emailInput, wrap())
+        form.addView(passwordInput, wrap())
+        form.addView(registerCheck, wrap())
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle(tr("ASSAF Cloud Account", "حساب ASSAF السحابي"))
+            .setView(form)
+            .setNegativeButton(tr("Cancel", "إلغاء"), null)
+            .setPositiveButton(tr("Continue", "متابعة"), null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val email = emailInput.text.toString().trim()
+                val password = passwordInput.text.toString()
+                if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    emailInput.error = tr("Enter a valid email", "أدخل بريدًا إلكترونيًا صحيحًا")
+                    return@setOnClickListener
+                }
+                if (password.length < if (registerCheck.isChecked) 10 else 1) {
+                    passwordInput.error = tr("Password is too short", "كلمة المرور قصيرة")
+                    return@setOnClickListener
+                }
+                cloudStatusText.text = tr("Connecting securely…", "جارٍ الاتصال بشكل آمن…")
+                dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
+                Thread {
+                    val result = runCatching {
+                        AssafApiClient.authenticate(email, password, registerCheck.isChecked)
+                    }
+                    runOnUiThread {
+                        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
+                        result.onSuccess { token ->
+                            prefs.edit().putString(KEY_API_TOKEN, token).putString(KEY_ACCOUNT_EMAIL, email).apply()
+                            cloudStatusText.text = tr("Signed in • Cloud sync ready", "تم تسجيل الدخول • المزامنة السحابية جاهزة")
+                            Toast.makeText(this, tr("ASSAF account connected", "تم ربط حساب ASSAF"), Toast.LENGTH_LONG).show()
+                            dialog.dismiss()
+                            syncCloudSettingChanges()
+                        }.onFailure {
+                            cloudStatusText.text = tr("Sign-in failed", "فشل تسجيل الدخول")
+                            android.app.AlertDialog.Builder(this)
+                                .setTitle(tr("Could not connect", "تعذر الاتصال"))
+                                .setMessage(it.message ?: tr("Please try again.", "حاول مرة أخرى."))
+                                .setPositiveButton(tr("OK", "حسنًا"), null).show()
+                        }
+                    }
+                }.start()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun syncCloudSettingChanges() {
+        val token = prefs.getString(KEY_API_TOKEN, null) ?: return
+        val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty().toSet()
+        Thread {
+            val result = runCatching {
+                selected.forEach { AssafApiClient.saveSetting(token, it, true) }
+                AssafApiClient.listSettings(token).length
+            }
+            runOnUiThread {
+                result.onSuccess { count ->
+                    cloudStatusText.text = tr("Cloud connected • $count saved cloud settings", "السحابة متصلة • $count إعدادات محفوظة")
+                }.onFailure {
+                    cloudStatusText.text = tr("Signed in • Sync needs retry", "تم تسجيل الدخول • تحتاج المزامنة لإعادة المحاولة")
+                }
+            }
+        }.start()
     }
 
     private fun loadApps() {
@@ -407,6 +535,9 @@ class MainActivity : Activity() {
                 val updated = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty().toMutableSet()
                 if (blocked) updated.remove(packageName) else updated.add(packageName)
                 prefs.edit().putStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, updated).apply()
+                prefs.getString(KEY_API_TOKEN, null)?.let { token ->
+                    Thread { runCatching { AssafApiClient.saveSetting(token, packageName, !blocked) } }.start()
+                }
                 loadApps()
                 if (updated.isEmpty()) {
                     startService(Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
@@ -533,6 +664,8 @@ class MainActivity : Activity() {
     companion object {
         private const val VPN_REQUEST = 901
         private const val KEY_ARABIC = "ui_arabic"
+        private const val KEY_API_TOKEN = "api_access_token"
+        private const val KEY_ACCOUNT_EMAIL = "api_account_email"
         private const val KEY_SCHEDULE_ENABLED = "schedule_enabled"
         private const val KEY_START_HOUR = "schedule_start_hour"
         private const val KEY_START_MINUTE = "schedule_start_minute"
