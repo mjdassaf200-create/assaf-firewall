@@ -77,11 +77,13 @@ class MainActivity : Activity() {
             setFillViewport(true)
             setBackgroundResource(R.drawable.assaf_background)
             isVerticalScrollBarEnabled = false
+            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(18), dp(18), dp(24))
             setBackgroundResource(R.drawable.assaf_background)
+            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
         scroll.addView(root)
 
