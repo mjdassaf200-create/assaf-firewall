@@ -16,9 +16,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sess
 
 APP_VERSION = "0.1.0"
 JWT_SECRET = os.getenv("JWT_SECRET")
-if not JWT_SECRET:
-    # Safe for local development only. Render must set a strong JWT_SECRET env var.
-    JWT_SECRET = "local-development-only-change-me"
+if not JWT_SECRET or len(JWT_SECRET) < 32:
+    raise RuntimeError("Set JWT_SECRET to a random secret of at least 32 characters before starting ASSAF API.")
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./assaf_local.db")
 if DATABASE_URL.startswith("postgres://"):
