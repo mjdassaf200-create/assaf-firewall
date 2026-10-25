@@ -75,13 +75,13 @@ class MainActivity : Activity() {
     private fun buildUi() {
         val scroll = ScrollView(this).apply {
             setFillViewport(true)
-            setBackgroundColor(navy)
+            setBackgroundResource(R.drawable.assaf_background)
             isVerticalScrollBarEnabled = false
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(18), dp(18), dp(24))
-            setBackgroundColor(navy)
+            setBackgroundResource(R.drawable.assaf_background)
         }
         scroll.addView(root)
 
@@ -90,17 +90,10 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         val logo = TextView(this).apply {
-            text = "A"
-            textSize = 30f
+            text = ""
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                setColor(Color.rgb(4, 20, 48))
-                setStroke(dp(2), blue)
-                cornerRadius = dp(16).toFloat()
-            }
+            background = getDrawable(R.drawable.assaf_logo)
+            contentDescription = "ASSAF shield logo"
         }
         header.addView(logo, LinearLayout.LayoutParams(dp(54), dp(54)))
         val brand = LinearLayout(this).apply {
