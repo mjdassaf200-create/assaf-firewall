@@ -454,7 +454,7 @@ Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app."""
         Thread {
             val result = runCatching {
                 selected.forEach { AssafApiClient.saveSetting(token, it, true) }
-                AssafApiClient.listSettings(token).size
+                AssafApiClient.listSettings(token).length()
             }
             runOnUiThread {
                 result.onSuccess { count ->
