@@ -95,7 +95,12 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
-            background = GradientDrawable().apply {\n                shape = GradientDrawable.RECTANGLE\n                setColor(Color.rgb(4, 20, 48))\n                setStroke(dp(2), blue)\n                cornerRadius = dp(16).toFloat()\n            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(Color.rgb(4, 20, 48))
+                setStroke(dp(2), blue)
+                cornerRadius = dp(16).toFloat()
+            }
         }
         header.addView(logo, LinearLayout.LayoutParams(dp(54), dp(54)))
         val brand = LinearLayout(this).apply {
@@ -344,8 +349,10 @@ class MainActivity : Activity() {
 
         root.addView(TextView(this).apply {
             text = tr(
-                "VPN-based filtering • Private by design\nAndroid does not allow ordinary apps to switch Wi-Fi/mobile data off per app.",
-                "تصفية عبر VPN • خصوصية من التصميم\nأندرويد لا يسمح للتطبيق العادي بإطفاء الواي فاي أو بيانات الهاتف لكل تطبيق."
+                "VPN-based filtering • Private by design
+Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app.",
+                "تصفية عبر VPN • خصوصية من التصميم
+أندرويد لا يسمح للتطبيق العادي بإطفاء الواي فاي أو بيانات الهاتف لكل تطبيق."
             )
             textSize = 11f
             gravity = Gravity.CENTER
@@ -607,8 +614,16 @@ class MainActivity : Activity() {
         val rx = android.net.TrafficStats.getTotalRxBytes().coerceAtLeast(0L)
         val tx = android.net.TrafficStats.getTotalTxBytes().coerceAtLeast(0L)
         statsText.text = tr(
-            "BLOCKED TRAFFIC\n${formatBytes(blockedBytes)}  •  ${packets} packets\n\nDEVICE NETWORK USAGE\n↓ ${formatBytes(rx)} received     ↑ ${formatBytes(tx)} sent",
-            "الحركة المحجوبة\n${formatBytes(blockedBytes)}  •  ${packets} حزمة\n\nاستخدام شبكة الجهاز\n↓ ${formatBytes(rx)} استقبال     ↑ ${formatBytes(tx)} إرسال"
+            "BLOCKED TRAFFIC
+${formatBytes(blockedBytes)}  •  ${packets} packets
+
+DEVICE NETWORK USAGE
+↓ ${formatBytes(rx)} received     ↑ ${formatBytes(tx)} sent",
+            "الحركة المحجوبة
+${formatBytes(blockedBytes)}  •  ${packets} حزمة
+
+استخدام شبكة الجهاز
+↓ ${formatBytes(rx)} استقبال     ↑ ${formatBytes(tx)} إرسال"
         )
     }
 
