@@ -91,11 +91,11 @@ class MainActivity : Activity() {
         }
         val logo = TextView(this).apply {
             text = "A"
-            textSize = 27f
+            textSize = 30f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
-            background = rounded(blue, 16)
+            background = GradientDrawable().apply {\n                shape = GradientDrawable.RECTANGLE\n                setColor(Color.rgb(4, 20, 48))\n                setStroke(dp(2), blue)\n                cornerRadius = dp(16).toFloat()\n            }
         }
         header.addView(logo, LinearLayout.LayoutParams(dp(54), dp(54)))
         val brand = LinearLayout(this).apply {
@@ -103,7 +103,7 @@ class MainActivity : Activity() {
             setPadding(dp(12), 0, 0, 0)
         }
         brand.addView(TextView(this).apply {
-            text = "MR. ASSAF"
+            text = "ASSAF"
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(white)
@@ -138,13 +138,13 @@ class MainActivity : Activity() {
             setPadding(dp(18), dp(22), dp(18), dp(22))
         }
         hero.addView(TextView(this).apply {
-            text = "◈"
-            textSize = 38f
+            text = "🛡  A  ⟲"
+            textSize = 30f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
         }, wrap())
         hero.addView(TextView(this).apply {
-            text = tr("YOUR DIGITAL WORLD, SECURED", "عالمك الرقمي، بأمان")
+            text = "ASSAF  •  YOUR INTERNET. YOUR CONTROL."
             textSize = 11f
             gravity = Gravity.CENTER
             letterSpacing = 0.08f
@@ -355,7 +355,7 @@ class MainActivity : Activity() {
         }, wrap())
 
         root.addView(TextView(this).apply {
-            text = "Developer: M. Azmi .Assaf"
+            text = "M. Azmi .Assaf"
             textSize = 13f
             gravity = Gravity.CENTER
             typeface = Typeface.DEFAULT_BOLD
