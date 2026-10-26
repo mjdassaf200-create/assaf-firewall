@@ -29,7 +29,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
+          cmdline-tools-version: "15859902"
           accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
 
       - name: Accept SDK licenses and install required packages
         shell: bash
