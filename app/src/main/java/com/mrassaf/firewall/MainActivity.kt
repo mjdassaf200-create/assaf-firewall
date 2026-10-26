@@ -452,15 +452,50 @@ Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app."""
 
     private fun syncCloudSettingChanges() {
         val token = prefs.getString(KEY_API_TOKEN, null) ?: return
-        val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty().toSet()
+        val localSelected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty().toSet()
         Thread {
             val result = runCatching {
-                selected.forEach { AssafApiClient.saveSetting(token, it, true) }
-                AssafApiClient.listSettings(token).length()
+                val remote = AssafApiClient.listSettings(token)
+                val remoteSettings = mutableMapOf<String, Boolean>()
+                for (i in 0 until remote.length()) {
+                    val item = remote.optJSONObject(i) ?: continue
+                    val packageName = item.optString("package_name")
+                    if (packageName.isNotBlank()) remoteSettings[packageName] = item.optBoolean("blocked", false)
+                }
+
+                val installedLaunchable = packageManager.getInstalledApplications(0)
+                    .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null && it.packageName != packageName }
+                    .map { it.packageName }
+                    .toSet()
+                val merged = localSelected.toMutableSet()
+
+                // Cloud values restore settings on this device; only apply packages installed here.
+                remoteSettings.forEach { (pkg, blocked) ->
+                    if (pkg in installedLaunchable) {
+                        if (blocked) merged.add(pkg) else merged.remove(pkg)
+                    }
+                }
+
+                // Upload local selections that have never been saved to the account.
+                merged.filter { it in installedLaunchable && it !in remoteSettings }
+                    .forEach { AssafApiClient.saveSetting(token, it, true) }
+
+                val savedCount = AssafApiClient.listSettings(token).length()
+                Pair(merged, savedCount)
             }
             runOnUiThread {
-                result.onSuccess { count ->
-                    cloudStatusText.text = tr("Cloud connected • $count saved cloud settings", "السحابة متصلة • $count إعدادات محفوظة")
+                result.onSuccess { (merged, count) ->
+                    prefs.edit().putStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, merged).apply()
+                    loadApps()
+                    if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
+                        if (merged.isEmpty()) {
+                            startService(Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
+                        } else {
+                            val serviceIntent = Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_START)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
+                        }
+                    }
+                    cloudStatusText.text = tr("Cloud connected • $count settings synced", "السحابة متصلة • تمت مزامنة $count إعدادات")
                 }.onFailure {
                     cloudStatusText.text = tr("Signed in • Sync needs retry", "تم تسجيل الدخول • تحتاج المزامنة لإعادة المحاولة")
                 }
