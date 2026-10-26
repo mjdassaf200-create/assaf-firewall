@@ -19,7 +19,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           accept-android-sdk-licenses: true
       - name: Accept SDK licenses and install required packages
