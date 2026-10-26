@@ -25,7 +25,9 @@ class FirewallVpnService : VpnService() {
     private fun startFirewall() {
         val selected = getSharedPreferences(PREFS, MODE_PRIVATE)
             .getStringSet(KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
-            .filter { it != packageName }.toSet()
+            .filter { pkg ->
+                pkg != packageName && runCatching { packageManager.getApplicationInfo(pkg, 0) }.isSuccess
+            }.toSet()
         if (selected.isEmpty()) { stopFirewall(); return }
         startForeground(NOTIFICATION_ID, buildNotification())
         try {
