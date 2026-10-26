@@ -17,6 +17,7 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -137,12 +138,14 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(dp(18), dp(22), dp(18), dp(22))
         }
-        hero.addView(TextView(this).apply {
-            text = "🛡  A  ⟲"
-            textSize = 30f
+        hero.addView(ImageView(this).apply {
+            setImageResource(R.drawable.assaf_logo)
+            contentDescription = "ASSAF metallic A and blue shield logo"
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+        }, LinearLayout.LayoutParams(dp(92), dp(92)).apply {
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-        }, wrap())
+            bottomMargin = dp(8)
+        })
         hero.addView(TextView(this).apply {
             text = "ASSAF  •  YOUR INTERNET. YOUR CONTROL."
             textSize = 11f
