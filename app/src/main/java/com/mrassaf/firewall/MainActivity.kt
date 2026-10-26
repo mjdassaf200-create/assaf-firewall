@@ -551,7 +551,12 @@ Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app."""
             listContainer.addView(row, params)
         }
         countText.text = selected.size.toString()
-        statusText.text = tr("${selected.size} apps selected. Apply to start protection.", "التطبيقات المحددة: ${selected.size}. اضغط تطبيق لبدء الحماية.")
+        val firewallActive = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
+        statusText.text = if (firewallActive) {
+            tr("${selected.size} apps selected • Protection is active", "التطبيقات المحددة: ${selected.size} • الحماية تعمل")
+        } else {
+            tr("${selected.size} apps selected. Apply to start protection.", "التطبيقات المحددة: ${selected.size}. اضغط تطبيق لبدء الحماية.")
+        }
         if (apps.isEmpty()) {
             listContainer.addView(TextView(this).apply {
                 text = tr("No launchable apps found.", "لم يتم العثور على تطبيقات قابلة للتشغيل.")
