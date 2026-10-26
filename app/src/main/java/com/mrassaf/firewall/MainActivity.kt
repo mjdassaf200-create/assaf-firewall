@@ -467,7 +467,7 @@ Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app."""
                     .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null && it.packageName != packageName }
                     .map { it.packageName }
                     .toSet()
-                val merged = localSelected.toMutableSet()
+                val merged = localSelected.filter { it in installedLaunchable }.toMutableSet()
 
                 // Cloud values restore settings on this device; only apply packages installed here.
                 remoteSettings.forEach { (pkg, blocked) ->
