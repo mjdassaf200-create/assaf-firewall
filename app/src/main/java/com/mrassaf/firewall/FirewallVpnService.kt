@@ -36,10 +36,10 @@ class FirewallVpnService : VpnService() {
                 .setMtu(1500)
                 .addAddress("10.111.0.1", 32)
                 .addRoute("0.0.0.0", 0)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                builder.addAddress("fd00:111::1", 128)
-                builder.addRoute("::", 0)
-            }
+            // Route IPv6 through the VPN on all supported Android versions too,
+            // otherwise selected apps may bypass the firewall over IPv6 on older devices.
+            builder.addAddress("fd00:111::1", 128)
+            builder.addRoute("::", 0)
             selected.forEach { builder.addAllowedApplication(it) }
             tunnel = builder.establish()
             val established = tunnel
