@@ -133,20 +133,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(52), dp(46)))
         root.addView(header, wrap())
 
-        // Approved ASSAF artwork shown as a visual hero; interactive controls remain below.
-        val heroImage = ImageView(this).apply {
-            setImageResource(R.drawable.assaf_main_interface)
-            contentDescription = tr("ASSAF main interface artwork", "صورة الواجهة الرئيسية لتطبيق عساف")
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            background = rounded(panel, 18)
-            clipToOutline = true
-        }
-        val heroParams = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(230)
-        )
-        heroParams.topMargin = dp(22)
-        root.addView(heroImage, heroParams)
+        // The approved ASSAF background stays behind the real, interactive app tiles.
 
         val statusCard = card(panel).apply {
             orientation = LinearLayout.VERTICAL
@@ -187,7 +174,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         appsHeader.addView(TextView(this).apply {
-            text = tr("YOUR APPLICATIONS", "تطبيقاتك")
+            text = tr("YOUR APPLICATIONS", "تطبيقاتك • اضغط على أي تطبيق")
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
             letterSpacing = 0.07f
@@ -489,42 +476,61 @@ Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app."""
         val apps = packageManager.getInstalledApplications(0)
             .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null && it.packageName != packageName }
             .sortedBy { packageManager.getApplicationLabel(it).toString().lowercase(Locale.ROOT) }
-        for (app in apps) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(12), dp(10), dp(12), dp(10))
-                background = rounded(panel, 14)
+
+        var tileRow: LinearLayout? = null
+        for ((index, app) in apps.withIndex()) {
+            if (index % 3 == 0) {
+                tileRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.TOP
+                    layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+                }
+                listContainer.addView(tileRow, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = dp(9) })
             }
-            runCatching { packageManager.getApplicationIcon(app) }.getOrNull()?.let { icon ->
-                row.addView(android.widget.ImageView(this).apply {
-                    setImageDrawable(icon)
-                    layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(12) }
-                })
+
+            val isBlocked = selected.contains(app.packageName)
+            val tile = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(6), dp(12), dp(6), dp(10))
+                background = rounded(if (isBlocked) Color.rgb(55, 34, 49) else panel, 16)
+                isClickable = true
+                isFocusable = true
+                contentDescription = packageManager.getApplicationLabel(app).toString()
             }
-            row.addView(TextView(this).apply {
-                text = packageManager.getApplicationLabel(app)
-                textSize = 16f
-                setTextColor(white)
-                maxLines = 2
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            val stateLabel = TextView(this).apply {
-                text = if (selected.contains(app.packageName)) tr("BLOCKED", "محجوب") else tr("ALLOWED", "متصل")
-                textSize = 11f
+            val iconView = ImageView(this).apply {
+                setImageDrawable(runCatching { packageManager.getApplicationIcon(app) }.getOrNull())
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }
+            tile.addView(iconView, LinearLayout.LayoutParams(dp(48), dp(48)))
+            tile.addView(TextView(this).apply {
+                text = packageManager.getApplicationLabel(app).toString()
+                textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
-                setTextColor(if (selected.contains(app.packageName)) Color.rgb(255, 153, 153) else green)
-                background = rounded(if (selected.contains(app.packageName)) Color.rgb(75, 35, 48) else Color.rgb(20, 65, 58), 10)
-                setPadding(dp(9), dp(7), dp(9), dp(7))
+                setTextColor(white)
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setPadding(0, dp(7), 0, dp(4))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)))
+            tile.addView(TextView(this).apply {
+                text = if (isBlocked) tr("BLOCKED", "محجوب") else tr("ALLOWED", "مسموح")
+                textSize = 9f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(if (isBlocked) Color.rgb(255, 153, 153) else green)
+            }, wrap())
+            tile.setOnClickListener {
+                confirmAppConnection(app.packageName, packageManager.getApplicationLabel(app).toString())
             }
-            row.addView(stateLabel)
-            row.isClickable = true
-            row.isFocusable = true
-            row.setOnClickListener { confirmAppConnection(app.packageName, packageManager.getApplicationLabel(app).toString()) }
-            val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            params.bottomMargin = dp(7)
-            appRows.add(app.packageName to row)
-            listContainer.addView(row, params)
+            val tileParams = LinearLayout.LayoutParams(0, dp(126), 1f).apply {
+                marginStart = dp(4)
+                marginEnd = dp(4)
+            }
+            tileRow?.addView(tile, tileParams)
+            appRows.add(app.packageName to tile)
         }
         countText.text = selected.size.toString()
         val firewallActive = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
