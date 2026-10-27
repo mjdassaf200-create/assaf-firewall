@@ -473,9 +473,26 @@ Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app."""
         listContainer.removeAllViews()
         appRows.clear()
         val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
+        // Keep the six requested social apps at the top in the agreed order.
+        // Apps not installed on this phone are skipped; the rest follow alphabetically.
+        val priorityPackages = listOf(
+            "com.whatsapp",             // WhatsApp
+            "org.telegram.messenger",   // Telegram
+            "com.instagram.android",    // Instagram
+            "com.facebook.katana",      // Facebook
+            "com.snapchat.android",     // Snapchat
+            "com.twitter.android"       // X
+        )
         val apps = packageManager.getInstalledApplications(0)
             .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null && it.packageName != packageName }
-            .sortedBy { packageManager.getApplicationLabel(it).toString().lowercase(Locale.ROOT) }
+            .sortedWith(
+                compareBy<android.content.pm.ApplicationInfo> {
+                    val rank = priorityPackages.indexOf(it.packageName)
+                    if (rank == -1) Int.MAX_VALUE else rank
+                }.thenBy {
+                    packageManager.getApplicationLabel(it).toString().lowercase(Locale.ROOT)
+                }
+            )
 
         var tileRow: LinearLayout? = null
         for ((index, app) in apps.withIndex()) {
