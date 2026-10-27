@@ -133,44 +133,20 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(52), dp(46)))
         root.addView(header, wrap())
 
-        val hero = card(blue).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(18), dp(22), dp(18), dp(22))
+        // Approved ASSAF artwork shown as a visual hero; interactive controls remain below.
+        val heroImage = ImageView(this).apply {
+            setImageResource(R.drawable.assaf_main_interface)
+            contentDescription = tr("ASSAF main interface artwork", "صورة الواجهة الرئيسية لتطبيق عساف")
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = rounded(panel, 18)
+            clipToOutline = true
         }
-        hero.addView(ImageView(this).apply {
-            setImageResource(R.drawable.assaf_logo)
-            contentDescription = "ASSAF metallic A and blue shield logo"
-            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-        }, LinearLayout.LayoutParams(dp(92), dp(92)).apply {
-            gravity = Gravity.CENTER
-            bottomMargin = dp(8)
-        })
-        hero.addView(TextView(this).apply {
-            text = "ASSAF  •  YOUR INTERNET. YOUR CONTROL."
-            textSize = 11f
-            gravity = Gravity.CENTER
-            letterSpacing = 0.08f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
-        }, wrap())
-        hero.addView(TextView(this).apply {
-            text = tr("Take control of your connections", "تحكّم باتصالات تطبيقاتك")
-            textSize = 20f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(8), 0, dp(4))
-        }, wrap())
-        hero.addView(TextView(this).apply {
-            text = tr("Choose which apps can access the internet.", "اختر التطبيقات المسموح لها بالوصول إلى الإنترنت.")
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTextColor(Color.rgb(230, 241, 255))
-        }, wrap())
-        val heroParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        val heroParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(230)
+        )
         heroParams.topMargin = dp(22)
-        root.addView(hero, heroParams)
+        root.addView(heroImage, heroParams)
 
         val statusCard = card(panel).apply {
             orientation = LinearLayout.VERTICAL
