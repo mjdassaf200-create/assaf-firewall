@@ -191,6 +191,12 @@ def root():
     return {"service": "ASSAF API", "version": APP_VERSION, "status": "ok", "docs": "/docs"}
 
 
+@app.head("/", include_in_schema=False, tags=["system"])
+def root_head():
+    # Platform HEAD probes should receive 200 instead of the default 405.
+    return None
+
+
 @app.get("/health", tags=["system"])
 def health():
     return {"status": "ok", "service": "assaf-api", "version": APP_VERSION}
