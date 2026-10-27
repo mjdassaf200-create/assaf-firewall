@@ -36,6 +36,7 @@ class MainActivity : Activity() {
     private lateinit var cloudStatusText: TextView
     private val prefs by lazy { getSharedPreferences(FirewallVpnService.PREFS, MODE_PRIVATE) }
     private var pendingStart = false
+    private var showAppsScreen = false
     private var arabic = true
     private var startHour = 22
     private var startMinute = 0
@@ -59,8 +60,7 @@ class MainActivity : Activity() {
         endHour = prefs.getInt(KEY_END_HOUR, 7)
         endMinute = prefs.getInt(KEY_END_MINUTE, 0)
         buildUi()
-        loadApps()
-        updateStats()
+        if (showAppsScreen) loadApps()
     }
 
     @Deprecated("Use platform callback; kept compatible without AndroidX dependency")
@@ -74,6 +74,82 @@ class MainActivity : Activity() {
     }
 
     private fun buildUi() {
+        if (showAppsScreen) buildAppsScreen() else buildHomeScreen()
+    }
+
+    // Main screen: keep the approved ASSAF artwork as the first thing the user sees.
+    // The Apps control is a real button, not a decorative part of the image.
+    private fun buildHomeScreen() {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(22), dp(24), dp(22), dp(24))
+            setBackgroundResource(R.drawable.assaf_background)
+            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        }
+        val brand = TextView(this).apply {
+            text = "ASSAF"
+            textSize = 30f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(white)
+            letterSpacing = 0.08f
+        }
+        root.addView(brand, wrap())
+        root.addView(TextView(this).apply {
+            text = "YOUR INTERNET. YOUR CONTROL."
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(muted)
+            letterSpacing = 0.08f
+            setPadding(0, dp(5), 0, dp(30))
+        }, wrap())
+
+        val appsButton = primaryButton(tr("Apps", "التطبيقات")).apply {
+            textSize = 18f
+            setCompoundDrawablePadding(dp(10))
+            contentDescription = tr("Open app list", "فتح قائمة التطبيقات")
+            setOnClickListener {
+                showAppsScreen = true
+                buildUi()
+                loadApps()
+            }
+        }
+        root.addView(appsButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)))
+
+        root.addView(TextView(this).apply {
+            text = tr("Tap Apps to manage internet access for your selected apps.", "اكبس على «التطبيقات» للتحكم باتصال الإنترنت للتطبيقات المحددة.")
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(white)
+            setPadding(dp(12), dp(16), dp(12), 0)
+        }, wrap())
+
+        root.addView(TextView(this).apply {
+            text = "M. Azmi .Assaf"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(muted)
+            setPadding(0, dp(28), 0, dp(4))
+        }, wrap())
+
+        val languageButton = smallButton().apply {
+            text = if (arabic) "English" else "العربية"
+            setOnClickListener {
+                arabic = !arabic
+                prefs.edit().putBoolean(KEY_ARABIC, arabic).apply()
+                buildUi()
+            }
+        }
+        val langParams = LinearLayout.LayoutParams(dp(140), dp(44))
+        langParams.topMargin = dp(14)
+        langParams.gravity = Gravity.CENTER
+        root.addView(languageButton, langParams)
+        setContentView(root)
+    }
+
+    // Separate app screen: only the six requested apps appear here.
+    private fun buildAppsScreen() {
         val scroll = ScrollView(this).apply {
             setFillViewport(true)
             setBackgroundResource(R.drawable.assaf_background)
@@ -88,263 +164,76 @@ class MainActivity : Activity() {
         }
         scroll.addView(root)
 
-        val header = LinearLayout(this).apply {
+        val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val logo = TextView(this).apply {
-            text = ""
-            gravity = Gravity.CENTER
-            background = getDrawable(R.drawable.assaf_logo)
-            contentDescription = "ASSAF shield logo"
-        }
-        header.addView(logo, LinearLayout.LayoutParams(dp(54), dp(54)))
-        val brand = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), 0, 0, 0)
-        }
-        brand.addView(TextView(this).apply {
-            text = "ASSAF"
-            textSize = 22f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(white)
-            letterSpacing = 0.06f
-        }, wrap())
-        brand.addView(TextView(this).apply {
-            text = "YOUR INTERNET. YOUR CONTROL."
-            textSize = 9f
-            setTextColor(muted)
-            letterSpacing = 0.08f
-        }, wrap())
-        header.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(Button(this).apply {
-            text = if (arabic) "EN" else "ع"
-            textSize = 14f
-            setTextColor(white)
-            background = rounded(panelLight, 12)
-            setPadding(dp(8), 0, dp(8), 0)
+        top.addView(smallButton().apply {
+            text = tr("← Back", "رجوع ←")
             setOnClickListener {
-                arabic = !arabic
-                prefs.edit().putBoolean(KEY_ARABIC, arabic).apply()
+                showAppsScreen = false
                 buildUi()
-                loadApps()
-                updateStats()
             }
-        }, LinearLayout.LayoutParams(dp(52), dp(46)))
-        root.addView(header, wrap())
-
-        // The approved ASSAF background stays behind the real, interactive app tiles.
-
-        val statusCard = card(panel).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(15), dp(14), dp(15), dp(14))
-        }
-        val statusHeading = TextView(this).apply {
-            text = tr("FIREWALL STATUS", "حالة جدار الحماية")
-            textSize = 11f
+        }, LinearLayout.LayoutParams(dp(100), dp(44)))
+        top.addView(TextView(this).apply {
+            text = tr("YOUR APPLICATIONS", "التطبيقات")
+            textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
-            letterSpacing = 0.08f
-            setTextColor(muted)
-        }
-        statusCard.addView(statusHeading, wrap())
-        statusText = TextView(this).apply {
-            text = tr("Ready to protect your device", "جاهز لحماية جهازك")
-            textSize = 15f
-            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
             setTextColor(white)
-            setPadding(0, dp(7), 0, 0)
-        }
-        statusCard.addView(statusText, wrap())
-        val statusParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        statusParams.topMargin = dp(12)
-        root.addView(statusCard, statusParams)
+            setPadding(dp(8), 0, dp(8), 0)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        root.addView(top, wrap())
 
-        sectionTitle(root, tr("NETWORK OVERVIEW", "نظرة عامة على الشبكة"))
-        statsText = TextView(this).apply {
+        statusText = TextView(this).apply {
             textSize = 13f
             setTextColor(white)
-            setLineSpacing(dp(5).toFloat(), 1f)
-            setPadding(dp(15), dp(14), dp(15), dp(14))
-            background = rounded(panel, 16)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = rounded(panel, 14)
         }
-        root.addView(statsText, wrap())
+        val statusParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        statusParams.topMargin = dp(14)
+        root.addView(statusText, statusParams)
 
-        val appsHeader = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        appsHeader.addView(TextView(this).apply {
-            text = tr("YOUR APPLICATIONS", "تطبيقاتك • اضغط على أي تطبيق")
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            letterSpacing = 0.07f
-            setTextColor(muted)
-            setPadding(0, dp(20), 0, dp(9))
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         countText = TextView(this).apply {
-            text = "0"
             textSize = 12f
-            gravity = Gravity.CENTER
-            setTextColor(white)
-            background = rounded(panelLight, 10)
-            setPadding(dp(12), dp(5), dp(12), dp(5))
+            setTextColor(muted)
+            setPadding(0, dp(14), 0, dp(4))
         }
-        appsHeader.addView(countText)
-        val appsParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        appsParams.topMargin = dp(20)
-        root.addView(appsHeader, appsParams)
+        root.addView(countText, wrap())
 
         searchBox = EditText(this).apply {
-            hint = tr("Search installed apps", "ابحث عن تطبيق مثبت")
+            hint = tr("Search these apps", "ابحث بين التطبيقات الستة")
             setSingleLine(true)
-            textSize = 15f
+            textSize = 14f
             setTextColor(white)
             setHintTextColor(muted)
             background = rounded(panel, 13)
             setPadding(dp(14), dp(10), dp(14), dp(10))
-            compoundDrawablePadding = dp(8)
             addTextChangedListener(SimpleTextWatcher { filterApps(it) })
         }
         val searchParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        searchParams.topMargin = dp(8)
+        searchParams.topMargin = dp(10)
         root.addView(searchBox, searchParams)
 
         listContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(8), 0, 0)
+            setPadding(0, dp(14), 0, dp(4))
         }
         root.addView(listContainer, wrap())
 
-        sectionTitle(root, tr("SMART SCHEDULE", "الجدولة الذكية"))
-        val scheduleCard = card(panel).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(10), dp(14), dp(14))
-        }
-        scheduleCheck = CheckBox(this).apply {
-            text = tr("Enable scheduled blocking", "تفعيل الحجب المجدول")
-            textSize = 14f
-            setTextColor(white)
-            buttonTintList = ColorStateList.valueOf(blue)
-            isChecked = prefs.getBoolean(KEY_SCHEDULE_ENABLED, false)
-        }
-        scheduleCard.addView(scheduleCheck, wrap())
-        val times = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        startTimeButton = smallButton()
-        startTimeButton.setOnClickListener { chooseTime(true) }
-        endTimeButton = smallButton()
-        endTimeButton.setOnClickListener { chooseTime(false) }
-        val timeParams = LinearLayout.LayoutParams(0, dp(48), 1f)
-        timeParams.marginEnd = dp(6)
-        times.addView(startTimeButton, timeParams)
-        val endParams = LinearLayout.LayoutParams(0, dp(48), 1f)
-        endParams.marginStart = dp(6)
-        times.addView(endTimeButton, endParams)
-        scheduleCard.addView(times, wrap())
-        updateTimeButtons()
-        val save = primaryButton(tr("Save schedule", "حفظ الجدولة"))
-        save.setOnClickListener { saveSchedule() }
-        val saveParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))
-        saveParams.topMargin = dp(10)
-        scheduleCard.addView(save, saveParams)
-        val scheduleParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        scheduleParams.topMargin = dp(8)
-        root.addView(scheduleCard, scheduleParams)
+        root.addView(primaryButton(tr("Apply & start protection", "تطبيق وبدء الحماية")).apply {
+            setOnClickListener { requestVpnAndStart() }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
 
-        sectionTitle(root, tr("ASSAF CLOUD ACCOUNT", "حساب ASSAF السحابي"))
-        val cloudCard = card(panel).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(14))
-        }
-        cloudStatusText = TextView(this).apply {
-            text = if (prefs.getString(KEY_API_TOKEN, null).isNullOrBlank())
-                tr("Not signed in • Settings stay on this device", "لم يتم تسجيل الدخول • الإعدادات محفوظة على الجهاز")
-            else tr("Signed in • ASSAF cloud connected", "تم تسجيل الدخول • اتصال ASSAF السحابي")
-            textSize = 13f
-            setTextColor(white)
-        }
-        cloudCard.addView(cloudStatusText, wrap())
-        val accountButton = primaryButton(tr("Sign in / Create account", "تسجيل الدخول / إنشاء حساب"))
-        accountButton.setOnClickListener { showAccountDialog() }
-        val accountParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))
-        accountParams.topMargin = dp(10)
-        cloudCard.addView(accountButton, accountParams)
-        val healthButton = smallButton().apply {
-            text = tr("Check server connection", "فحص اتصال السيرفر")
-            setOnClickListener {
-                cloudStatusText.text = tr("Checking server…", "جارٍ فحص السيرفر…")
-                Thread {
-                    val result = runCatching { AssafApiClient.checkHealth() }
-                    runOnUiThread {
-                        cloudStatusText.text = result.fold(
-                            { tr("Server reachable • API healthy", "السيرفر متصل • واجهة API تعمل") },
-                            { tr("Connection failed: " + (it.message ?: "unknown error"), "فشل الاتصال: " + (it.message ?: "خطأ غير معروف")) }
-                        )
-                    }
-                }.start()
-            }
-        }
-        val healthParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46))
-        healthParams.topMargin = dp(7)
-        cloudCard.addView(healthButton, healthParams)
-        val cloudParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        cloudParams.topMargin = dp(8)
-        root.addView(cloudCard, cloudParams)
-
-        sectionTitle(root, tr("FIREWALL CONTROLS", "التحكم بالحماية"))
-        val apply = primaryButton(tr("Apply & start protection", "تطبيق وبدء الحماية"))
-        apply.setOnClickListener { requestVpnAndStart() }
-        root.addView(apply, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
-        val stop = smallButton().apply {
+        root.addView(smallButton().apply {
             text = tr("Turn firewall off", "إيقاف جدار الحماية")
-            setTextColor(Color.rgb(255, 145, 145))
             setOnClickListener {
                 startService(Intent(this@MainActivity, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
                 statusText.text = tr("Firewall stop requested", "تم طلب إيقاف الحجب")
             }
-        }
-        val stopParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))
-        stopParams.topMargin = dp(8)
-        root.addView(stop, stopParams)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
 
-        root.addView(TextView(this).apply {
-            text = tr(
-                """VPN-based filtering • Private by design
-Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app.""",
-                """تصفية عبر VPN • خصوصية من التصميم
-أندرويد لا يسمح للتطبيق العادي بإطفاء الواي فاي أو بيانات الهاتف لكل تطبيق."""
-            )
-            textSize = 11f
-            gravity = Gravity.CENTER
-            setTextColor(muted)
-            setLineSpacing(dp(3).toFloat(), 1f)
-            setPadding(dp(8), dp(18), dp(8), 0)
-        }, wrap())
-
-        root.addView(TextView(this).apply {
-            text = "M. Azmi .Assaf"
-            textSize = 13f
-            gravity = Gravity.CENTER
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(white)
-            setPadding(dp(8), dp(20), dp(8), dp(4))
-        }, wrap())
-        root.addView(TextView(this).apply {
-            text = "mjdassaf200@gmail.com"
-            textSize = 12f
-            gravity = Gravity.CENTER
-            setTextColor(blue)
-            setPadding(dp(8), 0, dp(8), dp(12))
-            setOnClickListener {
-                val intent = Intent(Intent.ACTION_SENDTO).apply {
-                    data = android.net.Uri.parse("mailto:mjdassaf200@gmail.com")
-                    putExtra(Intent.EXTRA_SUBJECT, "MR. ASSAF App")
-                }
-                runCatching { startActivity(intent) }
-                    .onFailure { Toast.makeText(this@MainActivity, "No email app found", Toast.LENGTH_SHORT).show() }
-            }
-        }, wrap())
         setContentView(scroll)
     }
 
@@ -484,7 +373,7 @@ Android does not allow ordinary apps to switch Wi-Fi/mobile data off per app."""
             "com.twitter.android"       // X
         )
         val apps = packageManager.getInstalledApplications(0)
-            .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null && it.packageName != packageName }
+            .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null && it.packageName != packageName && it.packageName in priorityPackages }
             .sortedWith(
                 compareBy<android.content.pm.ApplicationInfo> {
                     val rank = priorityPackages.indexOf(it.packageName)
