@@ -362,29 +362,30 @@ class MainActivity : Activity() {
         listContainer.removeAllViews()
         appRows.clear()
         val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
-        // Keep the six requested social apps at the top in the agreed order.
-        // Apps not installed on this phone are skipped; the rest follow alphabetically.
-        val priorityPackages = listOf(
-            "com.whatsapp",             // WhatsApp
-            "org.telegram.messenger",   // Telegram
-            "com.instagram.android",    // Instagram
-            "com.facebook.katana",      // Facebook
-            "com.snapchat.android",     // Snapchat
-            "com.twitter.android"       // X
+
+        // Always show the same six apps in the approved design order, even if one
+        // is not installed on this phone. Use the installed app icon when available.
+        val priorityApps = listOf(
+            Triple("com.whatsapp", "WhatsApp", "W"),
+            Triple("com.facebook.katana", "Facebook", "f"),
+            Triple("com.zhiliaoapp.musically", "TikTok", "♪"),
+            Triple("com.instagram.android", "Instagram", "◎"),
+            Triple("com.google.android.youtube", "YouTube", "▶"),
+            Triple("com.twitter.android", "X", "𝕏")
         )
-        val apps = packageManager.getInstalledApplications(0)
-            .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null && it.packageName != packageName && it.packageName in priorityPackages }
-            .sortedWith(
-                compareBy<android.content.pm.ApplicationInfo> {
-                    val rank = priorityPackages.indexOf(it.packageName)
-                    if (rank == -1) Int.MAX_VALUE else rank
-                }.thenBy {
-                    packageManager.getApplicationLabel(it).toString().lowercase(Locale.ROOT)
-                }
-            )
 
         var tileRow: LinearLayout? = null
-        for ((index, app) in apps.withIndex()) {
+        for ((index, item) in priorityApps.withIndex()) {
+            val pkg = item.first
+            val fallbackLabel = item.second
+            val fallbackGlyph = item.third
+            val installedInfo = runCatching { packageManager.getApplicationInfo(pkg, 0) }.getOrNull()
+            val isInstalled = installedInfo != null &&
+                packageManager.getLaunchIntentForPackage(pkg) != null
+            val label = if (isInstalled) {
+                runCatching { packageManager.getApplicationLabel(installedInfo!!).toString() }.getOrDefault(fallbackLabel)
+            } else fallbackLabel
+
             if (index % 3 == 0) {
                 tileRow = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -396,7 +397,7 @@ class MainActivity : Activity() {
                 ).apply { bottomMargin = dp(9) })
             }
 
-            val isBlocked = selected.contains(app.packageName)
+            val isBlocked = selected.contains(pkg)
             val tile = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
@@ -404,15 +405,42 @@ class MainActivity : Activity() {
                 background = rounded(if (isBlocked) Color.rgb(55, 34, 49) else panel, 16)
                 isClickable = true
                 isFocusable = true
-                contentDescription = packageManager.getApplicationLabel(app).toString()
+                contentDescription = label
             }
+
             val iconView = ImageView(this).apply {
-                setImageDrawable(runCatching { packageManager.getApplicationIcon(app) }.getOrNull())
+                val drawable = if (isInstalled) runCatching {
+                    packageManager.getApplicationIcon(installedInfo!!)
+                }.getOrNull() else null
+                if (drawable != null) {
+                    setImageDrawable(drawable)
+                } else {
+                    setImageDrawable(GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(blue)
+                    })
+                    // The fallback glyph below keeps the tile recognizable when
+                    // that app is not installed on the device.
+                }
                 scaleType = ImageView.ScaleType.FIT_CENTER
             }
-            tile.addView(iconView, LinearLayout.LayoutParams(dp(48), dp(48)))
+            val iconHolder = LinearLayout(this).apply {
+                gravity = Gravity.CENTER
+                if (!isInstalled) {
+                    addView(TextView(this@MainActivity).apply {
+                        text = fallbackGlyph
+                        textSize = 28f
+                        typeface = Typeface.DEFAULT_BOLD
+                        gravity = Gravity.CENTER
+                        setTextColor(Color.WHITE)
+                    }, LinearLayout.LayoutParams(dp(48), dp(48)))
+                } else {
+                    addView(iconView, LinearLayout.LayoutParams(dp(48), dp(48)))
+                }
+            }
+            tile.addView(iconHolder, LinearLayout.LayoutParams(dp(52), dp(52)))
             tile.addView(TextView(this).apply {
-                text = packageManager.getApplicationLabel(app).toString()
+                text = label
                 textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
@@ -428,29 +456,32 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER
                 setTextColor(if (isBlocked) Color.rgb(255, 153, 153) else green)
             }, wrap())
+
             tile.setOnClickListener {
-                confirmAppConnection(app.packageName, packageManager.getApplicationLabel(app).toString())
+                if (isInstalled) {
+                    confirmAppConnection(pkg, label)
+                } else {
+                    Toast.makeText(
+                        this,
+                        tr("$label is not installed on this device.", "تطبيق $label غير مثبت على هذا الجهاز."),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
             val tileParams = LinearLayout.LayoutParams(0, dp(126), 1f).apply {
                 marginStart = dp(4)
                 marginEnd = dp(4)
             }
             tileRow?.addView(tile, tileParams)
-            appRows.add(app.packageName to tile)
+            appRows.add(pkg to tile)
         }
+
         countText.text = selected.size.toString()
         val firewallActive = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
         statusText.text = if (firewallActive) {
             tr("${selected.size} apps selected • Protection is active", "التطبيقات المحددة: ${selected.size} • الحماية تعمل")
         } else {
             tr("${selected.size} apps selected. Apply to start protection.", "التطبيقات المحددة: ${selected.size}. اضغط تطبيق لبدء الحماية.")
-        }
-        if (apps.isEmpty()) {
-            listContainer.addView(TextView(this).apply {
-                text = tr("No launchable apps found.", "لم يتم العثور على تطبيقات قابلة للتشغيل.")
-                setTextColor(muted)
-                setPadding(dp(12), dp(18), dp(12), dp(18))
-            }, wrap())
         }
     }
 
