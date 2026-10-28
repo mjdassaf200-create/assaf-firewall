@@ -286,3 +286,97 @@ def subscription(user: User = Depends(current_user), db: Session = Depends(get_d
         db.commit()
         db.refresh(row)
     return row
+
+
+# Owner-only analytics and privacy-conscious app telemetry.
+# Configure OWNER_ADMIN_EMAIL and OWNER_ADMIN_PASSWORD as Render secrets.
+import secrets
+from sqlalchemy import func
+
+OWNER_ADMIN_EMAIL = os.getenv("OWNER_ADMIN_EMAIL", "").strip().lower()
+OWNER_ADMIN_PASSWORD = os.getenv("OWNER_ADMIN_PASSWORD", "")
+
+class InstallRecord(Base):
+    __tablename__ = "install_records"
+    install_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    app_version: Mapped[str] = mapped_column(String(40), default="unknown")
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+Base.metadata.create_all(bind=engine)
+
+class OwnerLoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=256)
+
+class TelemetryPing(BaseModel):
+    install_id: str = Field(min_length=12, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    app_version: str = Field(default="unknown", max_length=40)
+
+def owner_token(email: str) -> TokenResponse:
+    expires = datetime.now(timezone.utc) + timedelta(hours=4)
+    token = jwt.encode({"sub": "owner:" + email, "email": email, "role": "owner", "exp": expires}, JWT_SECRET, algorithm="HS256")
+    return TokenResponse(access_token=token, expires_in=4 * 60 * 60)
+
+def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Owner login required")
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired owner session")
+    if payload.get("role") != "owner" or not str(payload.get("sub", "")).startswith("owner:"):
+        raise HTTPException(status_code=403, detail="Owner access only")
+    return payload
+
+@app.post("/v1/admin/login", tags=["owner"])
+def owner_login(body: OwnerLoginRequest):
+    if not OWNER_ADMIN_EMAIL or not OWNER_ADMIN_PASSWORD:
+        raise HTTPException(status_code=503, detail="Owner login is not configured yet")
+    supplied_email = str(body.email).strip().lower()
+    if not secrets.compare_digest(supplied_email, OWNER_ADMIN_EMAIL) or not secrets.compare_digest(body.password, OWNER_ADMIN_PASSWORD):
+        raise HTTPException(status_code=401, detail="Email or password is incorrect")
+    return owner_token(supplied_email)
+
+@app.get("/v1/admin/overview", tags=["owner"])
+def owner_overview(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    active_since = now - timedelta(minutes=5)
+    day_since = now - timedelta(hours=24)
+    total_users = db.query(User).count()
+    total_installs = db.query(InstallRecord).count()
+    active_installs = db.query(InstallRecord).filter(InstallRecord.last_seen >= active_since).count()
+    seen_24h = db.query(InstallRecord).filter(InstallRecord.last_seen >= day_since).count()
+    new_users_7d = db.query(User).filter(User.created_at >= now - timedelta(days=7)).count()
+    latest = db.query(InstallRecord).order_by(InstallRecord.last_seen.desc()).limit(8).all()
+    return {
+        "generated_at": now.isoformat(),
+        "metrics": {
+            "registered_users": total_users,
+            "reported_installs": total_installs,
+            "active_devices_5m": active_installs,
+            "devices_seen_24h": seen_24h,
+            "new_accounts_7d": new_users_7d,
+        },
+        "latest_activity": [
+            {"app_version": row.app_version, "last_seen": row.last_seen.isoformat()}
+            for row in latest
+        ],
+        "notes": {
+            "active_devices_5m": "Installations that pinged the API within the last five minutes; requires the app telemetry client.",
+            "reported_installs": "Unique installation IDs reported by the app, not APK downloads from a store.",
+        },
+    }
+
+@app.post("/v1/telemetry/ping", status_code=204, tags=["telemetry"])
+def telemetry_ping(body: TelemetryPing, db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    row = db.get(InstallRecord, body.install_id)
+    if row is None:
+        row = InstallRecord(install_id=body.install_id, app_version=body.app_version, first_seen=now, last_seen=now)
+        db.add(row)
+    else:
+        row.app_version = body.app_version
+        row.last_seen = now
+    db.commit()
+    return None
