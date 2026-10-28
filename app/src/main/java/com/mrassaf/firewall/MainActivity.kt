@@ -81,69 +81,49 @@ class MainActivity : Activity() {
     // Main screen: keep the approved ASSAF artwork as the first thing the user sees.
     // The Apps control is a real button, not a decorative part of the image.
     private fun buildHomeScreen() {
-        // Show the approved 27 October artwork as the actual home screen.
-        // The invisible hit area sits over the Apps tile printed in that artwork.
+        // Keep the approved ASSAF artwork visually unchanged. The artwork itself
+        // opens the Apps screen as a safe fallback, so the app is not trapped on
+        // a non-interactive image if a hotspot is misaligned on a different phone.
         val root = FrameLayout(this).apply {
-            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
             setBackgroundColor(navy)
+        }
+        val openApps = {
+            showAppsScreen = true
+            buildUi()
+            loadApps()
         }
         val artwork = ImageView(this).apply {
             setImageResource(R.drawable.assaf_main_interface)
             scaleType = ImageView.ScaleType.FIT_XY
-            contentDescription = tr("ASSAF main screen", "الشاشة الرئيسية لتطبيق عساف")
-            isClickable = false
-            isFocusable = false
+            contentDescription = tr("ASSAF main screen — tap to open apps", "واجهة عساف الرئيسية — اضغط لفتح التطبيقات")
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { openApps() }
         }
         root.addView(artwork, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ))
 
+        // Invisible Apps-card hit area retained for the intended tile interaction.
         val appsHotspot = View(this).apply {
-            contentDescription = tr("Apps — open application list", "قائمة التطبيقات — فتح التطبيقات")
+            contentDescription = tr("Apps — open application list", "التطبيقات — فتح قائمة التطبيقات")
             isClickable = true
             isFocusable = true
             setBackgroundColor(Color.TRANSPARENT)
-            setOnClickListener {
-                showAppsScreen = true
-                buildUi()
-                loadApps()
-            }
+            setOnClickListener { openApps() }
         }
         root.addView(appsHotspot, FrameLayout.LayoutParams(1, 1, Gravity.TOP or Gravity.START))
-
-        // Coordinates follow the Apps card in the approved 1024x1536 artwork.
         root.post {
             val w = root.width
             val h = root.height
             val lp = appsHotspot.layoutParams as FrameLayout.LayoutParams
-            lp.width = (w * 0.215f).toInt()
-            lp.height = (h * 0.125f).toInt()
-            lp.leftMargin = (w * 0.515f).toInt()
-            lp.topMargin = (h * 0.465f).toInt()
+            lp.width = (w * 0.30f).toInt()
+            lp.height = (h * 0.18f).toInt()
+            lp.leftMargin = (w * 0.46f).toInt()
+            lp.topMargin = (h * 0.42f).toInt()
             appsHotspot.layoutParams = lp
         }
-
-        // Keep language switching accessible without replacing the artwork.
-        val languageButton = Button(this).apply {
-            text = if (arabic) "English" else "العربية"
-            textSize = 11f
-            typeface = Typeface.DEFAULT_BOLD
-            isAllCaps = false
-            setTextColor(white)
-            background = rounded(Color.argb(205, 7, 27, 59), 18)
-            setOnClickListener {
-                arabic = !arabic
-                prefs.edit().putBoolean(KEY_ARABIC, arabic).apply()
-                buildUi()
-            }
-        }
-        root.addView(languageButton, FrameLayout.LayoutParams(
-            dp(100), dp(40), Gravity.TOP or Gravity.END
-        ).apply {
-            topMargin = dp(10)
-            marginEnd = dp(10)
-        })
         setContentView(root)
     }
 
