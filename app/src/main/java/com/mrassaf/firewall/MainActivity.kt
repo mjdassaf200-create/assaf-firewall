@@ -37,7 +37,7 @@ class MainActivity : Activity() {
     private lateinit var cloudStatusText: TextView
     private val prefs by lazy { getSharedPreferences(FirewallVpnService.PREFS, MODE_PRIVATE) }
     private var pendingStart = false
-    private var showAppsScreen = false
+    private var currentScreen = "home"
     private var arabic = true
     private var startHour = 22
     private var startMinute = 0
@@ -61,7 +61,7 @@ class MainActivity : Activity() {
         endHour = prefs.getInt(KEY_END_HOUR, 7)
         endMinute = prefs.getInt(KEY_END_MINUTE, 0)
         buildUi()
-        if (showAppsScreen) loadApps()
+        if (currentScreen == "apps") loadApps()
     }
 
     @Deprecated("Use platform callback; kept compatible without AndroidX dependency")
@@ -75,55 +75,146 @@ class MainActivity : Activity() {
     }
 
     private fun buildUi() {
-        if (showAppsScreen) buildAppsScreen() else buildHomeScreen()
+        when (currentScreen) {
+            "apps" -> { buildAppsScreen(); loadApps() }
+            "stats" -> buildStatsScreen()
+            "connection" -> buildConnectionScreen()
+            "schedule" -> buildScheduleScreen()
+            "settings" -> buildSettingsScreen()
+            else -> buildHomeScreen()
+        }
     }
 
-    // Main screen: keep the approved ASSAF artwork as the first thing the user sees.
-    // The Apps control is a real button, not a decorative part of the image.
+    private fun goTo(screen: String) { currentScreen = screen; buildUi() }
+
+    private fun pageRoot(title: String): LinearLayout {
+        val scroll = ScrollView(this).apply { setFillViewport(true); setBackgroundColor(navy); isVerticalScrollBarEnabled = false }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(18), dp(18), dp(24))
+            setBackgroundResource(R.drawable.assaf_background)
+            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        }
+        scroll.addView(root)
+        root.addView(smallButton().apply {
+            text = tr("← Back to home", "← الرجوع للرئيسية")
+            setOnClickListener { goTo("home") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)))
+        root.addView(TextView(this).apply {
+            text = title; textSize = 22f; typeface = Typeface.DEFAULT_BOLD
+            setTextColor(white); gravity = Gravity.CENTER; setPadding(0, dp(20), 0, dp(20))
+        }, wrap())
+        setContentView(scroll)
+        return root
+    }
+
+    private fun infoCard(value: String): TextView = TextView(this).apply {
+        text = value; textSize = 15f; setTextColor(white)
+        setPadding(dp(16), dp(16), dp(16), dp(16)); background = rounded(panel, 16)
+    }
+
+    private fun buildStatsScreen() {
+        val root = pageRoot(tr("Network statistics", "إحصائيات الشبكة"))
+        statsText = infoCard("")
+        root.addView(statsText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(14) })
+        root.addView(primaryButton(tr("Refresh statistics", "تحديث الإحصائيات")).apply { setOnClickListener { updateStats() } },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
+        updateStats()
+    }
+
+    private fun buildConnectionScreen() {
+        val root = pageRoot(tr("Data connection", "اتصال البيانات"))
+        val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val active = cm.activeNetwork
+        val caps = if (active != null) cm.getNetworkCapabilities(active) else null
+        val connected = caps != null
+        val wifi = caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true
+        val cellular = caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) == true
+        val status = tr(
+            "Connection: " + (if (connected) "Connected" else "No active connection") + "\nWi-Fi: " + (if (wifi) "Connected" else "Not active") + "\nMobile data: " + (if (cellular) "Active" else "Not active"),
+            "الاتصال: " + (if (connected) "متصل" else "لا يوجد اتصال نشط") + "\nالواي فاي: " + (if (wifi) "متصل" else "غير نشط") + "\nبيانات الهاتف: " + (if (cellular) "نشطة" else "غير نشطة")
+        )
+        root.addView(infoCard(status), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(16) })
+        root.addView(primaryButton(tr("Open internet settings", "فتح إعدادات الإنترنت")).apply {
+            setOnClickListener {
+                runCatching { startActivity(Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS)) }
+                    .onFailure { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) }
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+        root.addView(TextView(this).apply {
+            text = tr("Android does not let ordinary apps switch Wi-Fi/mobile data directly. Use system settings to change them.",
+                "أندرويد لا يسمح للتطبيقات العادية بتشغيل أو إيقاف الواي فاي/بيانات الهاتف مباشرة. استخدم إعدادات النظام للتحكم.")
+            textSize = 13f; setTextColor(muted); setPadding(0, dp(16), 0, 0)
+        }, wrap())
+    }
+
+    private fun buildScheduleScreen() {
+        val root = pageRoot(tr("Protection schedule", "جدولة الحماية"))
+        scheduleCheck = CheckBox(this).apply {
+            text = tr("Enable scheduled blocking", "تفعيل الحجب حسب الجدول")
+            setTextColor(white); isChecked = prefs.getBoolean(KEY_SCHEDULE_ENABLED, false)
+            buttonTintList = ColorStateList.valueOf(blue)
+        }
+        root.addView(scheduleCheck, wrap())
+        startTimeButton = primaryButton("").apply { setOnClickListener { chooseTime(true) } }
+        endTimeButton = primaryButton("").apply { setOnClickListener { chooseTime(false) } }
+        root.addView(startTimeButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(12) })
+        root.addView(endTimeButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(10) })
+        updateTimeButtons()
+        root.addView(primaryButton(tr("Save schedule", "حفظ الجدولة")).apply { setOnClickListener { saveSchedule() } },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(18) })
+        root.addView(TextView(this).apply {
+            text = tr("Selected apps are blocked between the start and end times.", "سيتم حجب التطبيقات المحددة بين وقت البداية والنهاية.")
+            textSize = 13f; setTextColor(muted); setPadding(0, dp(16), 0, 0)
+        }, wrap())
+    }
+
+    private fun buildSettingsScreen() {
+        val root = pageRoot(tr("Settings", "الإعدادات"))
+        root.addView(CheckBox(this).apply {
+            text = tr("Use Arabic interface", "استخدام الواجهة العربية")
+            setTextColor(white); isChecked = arabic; buttonTintList = ColorStateList.valueOf(blue)
+            setOnCheckedChangeListener { _, checked ->
+                arabic = checked; prefs.edit().putBoolean(KEY_ARABIC, arabic).apply(); goTo("settings")
+            }
+        }, wrap())
+        root.addView(primaryButton(tr("ASSAF cloud account", "حساب ASSAF السحابي")).apply { setOnClickListener { showAccountDialog() } },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(14) })
+        val active = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
+        root.addView(infoCard(tr("Firewall status: " + if (active) "Active" else "Off", "حالة جدار الحماية: " + if (active) "يعمل" else "متوقف")),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
+    }
+
+    // Approved artwork stays unchanged; transparent hotspots open real screens.
     private fun buildHomeScreen() {
-        // Keep the approved ASSAF artwork visually unchanged. The artwork itself
-        // opens the Apps screen as a safe fallback, so the app is not trapped on
-        // a non-interactive image if a hotspot is misaligned on a different phone.
-        val root = FrameLayout(this).apply {
-            setBackgroundColor(navy)
-        }
-        val openApps = {
-            showAppsScreen = true
-            buildUi()
-            loadApps()
-        }
+        val root = FrameLayout(this).apply { setBackgroundColor(navy) }
         val artwork = ImageView(this).apply {
             setImageResource(R.drawable.assaf_main_interface)
             scaleType = ImageView.ScaleType.FIT_XY
-            contentDescription = tr("ASSAF main screen — tap to open apps", "واجهة عساف الرئيسية — اضغط لفتح التطبيقات")
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { openApps() }
+            contentDescription = tr("ASSAF main screen", "واجهة عساف الرئيسية")
+            isClickable = false
         }
-        root.addView(artwork, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        ))
-
-        // Invisible Apps-card hit area retained for the intended tile interaction.
-        val appsHotspot = View(this).apply {
-            contentDescription = tr("Apps — open application list", "التطبيقات — فتح قائمة التطبيقات")
-            isClickable = true
-            isFocusable = true
-            setBackgroundColor(Color.TRANSPARENT)
-            setOnClickListener { openApps() }
+        root.addView(artwork, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        fun hotspot(label: String, x: Float, y: Float, width: Float, height: Float, screen: String) {
+            val v = View(this).apply {
+                contentDescription = label; isClickable = true; isFocusable = true
+                setBackgroundColor(Color.TRANSPARENT); setOnClickListener { goTo(screen) }
+            }
+            root.addView(v, FrameLayout.LayoutParams(1, 1, Gravity.TOP or Gravity.START))
+            root.post {
+                if (root.width > 0 && root.height > 0) {
+                    val lp = v.layoutParams as FrameLayout.LayoutParams
+                    lp.width = (root.width * width).toInt(); lp.height = (root.height * height).toInt()
+                    lp.leftMargin = (root.width * x).toInt(); lp.topMargin = (root.height * y).toInt()
+                    v.layoutParams = lp
+                }
+            }
         }
-        root.addView(appsHotspot, FrameLayout.LayoutParams(1, 1, Gravity.TOP or Gravity.START))
-        root.post {
-            val w = root.width
-            val h = root.height
-            val lp = appsHotspot.layoutParams as FrameLayout.LayoutParams
-            lp.width = (w * 0.30f).toInt()
-            lp.height = (h * 0.18f).toInt()
-            lp.leftMargin = (w * 0.46f).toInt()
-            lp.topMargin = (h * 0.42f).toInt()
-            appsHotspot.layoutParams = lp
-        }
+        hotspot(tr("Apps", "التطبيقات"), 0.46f, 0.42f, 0.30f, 0.18f, "apps")
+        hotspot(tr("Statistics", "الإحصائيات"), 0.10f, 0.42f, 0.30f, 0.18f, "stats")
+        hotspot(tr("Data connection", "اتصال البيانات"), 0.10f, 0.60f, 0.30f, 0.16f, "connection")
+        hotspot(tr("Schedule", "الجدولة"), 0.46f, 0.60f, 0.30f, 0.16f, "schedule")
+        hotspot(tr("Settings", "الإعدادات"), 0.28f, 0.77f, 0.42f, 0.12f, "settings")
         setContentView(root)
     }
 
@@ -150,7 +241,7 @@ class MainActivity : Activity() {
         top.addView(smallButton().apply {
             text = tr("← Back", "رجوع ←")
             setOnClickListener {
-                showAppsScreen = false
+                currentScreen = "home"
                 buildUi()
             }
         }, LinearLayout.LayoutParams(dp(100), dp(44)))
