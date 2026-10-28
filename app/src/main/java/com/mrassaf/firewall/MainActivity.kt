@@ -202,7 +202,7 @@ class MainActivity : Activity() {
         root.addView(countText, wrap())
 
         searchBox = EditText(this).apply {
-            hint = tr("Search these apps", "ابحث بين التطبيقات الستة")
+            hint = tr("Search installed apps", "ابحث في تطبيقات الهاتف")
             setSingleLine(true)
             textSize = 14f
             setTextColor(white)
@@ -362,28 +362,22 @@ class MainActivity : Activity() {
         appRows.clear()
         val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
 
-        // Always show the same six apps in the approved design order, even if one
-        // is not installed on this phone. Use the installed app icon when available.
-        val priorityApps = listOf(
-            Triple("com.whatsapp", "WhatsApp", "W"),
-            Triple("com.facebook.katana", "Facebook", "f"),
-            Triple("com.zhiliaoapp.musically", "TikTok", "♪"),
-            Triple("com.instagram.android", "Instagram", "◎"),
-            Triple("com.google.android.youtube", "YouTube", "▶"),
-            Triple("com.twitter.android", "X", "𝕏")
-        )
+        // Discover every installed app that has a launcher activity. The approved
+        // home artwork is untouched; only the contents of the Apps screen are dynamic.
+        val installedApps = packageManager.getInstalledApplications(0)
+            .filter { it.packageName != packageName && packageManager.getLaunchIntentForPackage(it.packageName) != null }
+            .map { info ->
+                val label = runCatching { packageManager.getApplicationLabel(info).toString() }
+                    .getOrDefault(info.packageName)
+                Triple(info, label, info.packageName)
+            }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.second })
 
         var tileRow: LinearLayout? = null
-        for ((index, item) in priorityApps.withIndex()) {
-            val pkg = item.first
-            val fallbackLabel = item.second
-            val fallbackGlyph = item.third
-            val installedInfo = runCatching { packageManager.getApplicationInfo(pkg, 0) }.getOrNull()
-            val isInstalled = installedInfo != null &&
-                packageManager.getLaunchIntentForPackage(pkg) != null
-            val label = if (isInstalled) {
-                runCatching { packageManager.getApplicationLabel(installedInfo!!).toString() }.getOrDefault(fallbackLabel)
-            } else fallbackLabel
+        installedApps.forEachIndexed { index, item ->
+            val info = item.first
+            val label = item.second
+            val pkg = item.third
 
             if (index % 3 == 0) {
                 tileRow = LinearLayout(this).apply {
@@ -408,36 +402,15 @@ class MainActivity : Activity() {
             }
 
             val iconView = ImageView(this).apply {
-                val drawable = if (isInstalled) runCatching {
-                    packageManager.getApplicationIcon(installedInfo!!)
-                }.getOrNull() else null
-                if (drawable != null) {
-                    setImageDrawable(drawable)
-                } else {
-                    setImageDrawable(GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(blue)
-                    })
-                    // The fallback glyph below keeps the tile recognizable when
-                    // that app is not installed on the device.
-                }
+                val drawable = runCatching { packageManager.getApplicationIcon(info) }.getOrNull()
+                if (drawable != null) setImageDrawable(drawable)
+                else setImageDrawable(GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(blue)
+                })
                 scaleType = ImageView.ScaleType.FIT_CENTER
             }
-            val iconHolder = LinearLayout(this).apply {
-                gravity = Gravity.CENTER
-                if (!isInstalled) {
-                    addView(TextView(this@MainActivity).apply {
-                        text = fallbackGlyph
-                        textSize = 28f
-                        typeface = Typeface.DEFAULT_BOLD
-                        gravity = Gravity.CENTER
-                        setTextColor(Color.WHITE)
-                    }, LinearLayout.LayoutParams(dp(48), dp(48)))
-                } else {
-                    addView(iconView, LinearLayout.LayoutParams(dp(48), dp(48)))
-                }
-            }
-            tile.addView(iconHolder, LinearLayout.LayoutParams(dp(52), dp(52)))
+            tile.addView(iconView, LinearLayout.LayoutParams(dp(52), dp(52)))
             tile.addView(TextView(this).apply {
                 text = label
                 textSize = 12f
@@ -456,17 +429,7 @@ class MainActivity : Activity() {
                 setTextColor(if (isBlocked) Color.rgb(255, 153, 153) else green)
             }, wrap())
 
-            tile.setOnClickListener {
-                if (isInstalled) {
-                    confirmAppConnection(pkg, label)
-                } else {
-                    Toast.makeText(
-                        this,
-                        tr("$label is not installed on this device.", "تطبيق $label غير مثبت على هذا الجهاز."),
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
+            tile.setOnClickListener { confirmAppConnection(pkg, label) }
             val tileParams = LinearLayout.LayoutParams(0, dp(126), 1f).apply {
                 marginStart = dp(4)
                 marginEnd = dp(4)
@@ -475,7 +438,20 @@ class MainActivity : Activity() {
             appRows.add(pkg to tile)
         }
 
-        countText.text = selected.size.toString()
+        if (installedApps.isEmpty()) {
+            listContainer.addView(TextView(this).apply {
+                text = tr("No launchable apps were found.", "لم يتم العثور على تطبيقات قابلة للفتح.")
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(muted)
+                setPadding(dp(12), dp(24), dp(12), dp(24))
+            }, wrap())
+        }
+
+        countText.text = tr(
+            "${installedApps.size} apps found • ${selected.size} selected",
+            "التطبيقات الموجودة: ${installedApps.size} • المحددة للحجب: ${selected.size}"
+        )
         val firewallActive = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
         statusText.text = if (firewallActive) {
             tr("${selected.size} apps selected • Protection is active", "التطبيقات المحددة: ${selected.size} • الحماية تعمل")
