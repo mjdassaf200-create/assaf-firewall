@@ -607,12 +607,17 @@ class MainActivity : Activity() {
                 loadApps()
                 if (updated.isEmpty()) {
                     startService(Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
+                } else if (!blocked) {
+                    // When the user blocks an app, start the VPN immediately if needed.
+                    // Android's VPN consent is requested only the first time (or after revocation).
+                    requestVpnAndStart()
                 } else if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
+                    // Keep the VPN rules in sync after an app is allowed again.
                     val serviceIntent = Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_START)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
                 }
                 val toastText = if (blocked) tr("Internet connection restored for $appName", "تمت معاودة اتصال $appName بالإنترنت")
-                                 else tr("Internet blocked for $appName", "تم إيقاف اتصال $appName بالإنترنت")
+                                 else tr("Internet blocking requested for $appName", "تم طلب فصل الإنترنت عن $appName")
                 Toast.makeText(this, toastText, Toast.LENGTH_LONG).show()
             }
             .show()
