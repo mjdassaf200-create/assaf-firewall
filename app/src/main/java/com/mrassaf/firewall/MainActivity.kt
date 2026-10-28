@@ -18,6 +18,7 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ImageView
+import android.widget.FrameLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -80,71 +81,69 @@ class MainActivity : Activity() {
     // Main screen: keep the approved ASSAF artwork as the first thing the user sees.
     // The Apps control is a real button, not a decorative part of the image.
     private fun buildHomeScreen() {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(22), dp(24), dp(22), dp(24))
-            setBackgroundResource(R.drawable.assaf_background)
+        // Show the approved 27 October artwork as the actual home screen.
+        // The invisible hit area sits over the Apps tile printed in that artwork.
+        val root = FrameLayout(this).apply {
             layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+            setBackgroundColor(navy)
         }
-        val brand = TextView(this).apply {
-            text = "ASSAF"
-            textSize = 30f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setTextColor(white)
-            letterSpacing = 0.08f
+        val artwork = ImageView(this).apply {
+            setImageResource(R.drawable.assaf_main_interface)
+            scaleType = ImageView.ScaleType.FIT_XY
+            contentDescription = tr("ASSAF main screen", "الشاشة الرئيسية لتطبيق عساف")
+            isClickable = false
+            isFocusable = false
         }
-        root.addView(brand, wrap())
-        root.addView(TextView(this).apply {
-            text = "YOUR INTERNET. YOUR CONTROL."
-            textSize = 11f
-            gravity = Gravity.CENTER
-            setTextColor(muted)
-            letterSpacing = 0.08f
-            setPadding(0, dp(5), 0, dp(30))
-        }, wrap())
+        root.addView(artwork, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
 
-        val appsButton = primaryButton(tr("Apps", "التطبيقات")).apply {
-            textSize = 18f
-            setCompoundDrawablePadding(dp(10))
-            contentDescription = tr("Open app list", "فتح قائمة التطبيقات")
+        val appsHotspot = View(this).apply {
+            contentDescription = tr("Apps — open application list", "قائمة التطبيقات — فتح التطبيقات")
+            isClickable = true
+            isFocusable = true
+            setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener {
                 showAppsScreen = true
                 buildUi()
                 loadApps()
             }
         }
-        root.addView(appsButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)))
+        root.addView(appsHotspot, FrameLayout.LayoutParams(1, 1, Gravity.TOP or Gravity.START))
 
-        root.addView(TextView(this).apply {
-            text = tr("Tap Apps to manage internet access for your selected apps.", "اكبس على «التطبيقات» للتحكم باتصال الإنترنت للتطبيقات المحددة.")
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTextColor(white)
-            setPadding(dp(12), dp(16), dp(12), 0)
-        }, wrap())
+        // Coordinates follow the Apps card in the approved 1024x1536 artwork.
+        root.post {
+            val w = root.width
+            val h = root.height
+            val lp = appsHotspot.layoutParams as FrameLayout.LayoutParams
+            lp.width = (w * 0.215f).toInt()
+            lp.height = (h * 0.125f).toInt()
+            lp.leftMargin = (w * 0.515f).toInt()
+            lp.topMargin = (h * 0.465f).toInt()
+            appsHotspot.layoutParams = lp
+        }
 
-        root.addView(TextView(this).apply {
-            text = "M. Azmi .Assaf"
-            textSize = 12f
-            gravity = Gravity.CENTER
-            setTextColor(muted)
-            setPadding(0, dp(28), 0, dp(4))
-        }, wrap())
-
-        val languageButton = smallButton().apply {
+        // Keep language switching accessible without replacing the artwork.
+        val languageButton = Button(this).apply {
             text = if (arabic) "English" else "العربية"
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            isAllCaps = false
+            setTextColor(white)
+            background = rounded(Color.argb(205, 7, 27, 59), 18)
             setOnClickListener {
                 arabic = !arabic
                 prefs.edit().putBoolean(KEY_ARABIC, arabic).apply()
                 buildUi()
             }
         }
-        val langParams = LinearLayout.LayoutParams(dp(140), dp(44))
-        langParams.topMargin = dp(14)
-        langParams.gravity = Gravity.CENTER
-        root.addView(languageButton, langParams)
+        root.addView(languageButton, FrameLayout.LayoutParams(
+            dp(100), dp(40), Gravity.TOP or Gravity.END
+        ).apply {
+            topMargin = dp(10)
+            marginEnd = dp(10)
+        })
         setContentView(root)
     }
 
@@ -152,7 +151,7 @@ class MainActivity : Activity() {
     private fun buildAppsScreen() {
         val scroll = ScrollView(this).apply {
             setFillViewport(true)
-            setBackgroundResource(R.drawable.assaf_background)
+            setBackgroundResource(R.drawable.assaf_main_interface)
             isVerticalScrollBarEnabled = false
             layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
