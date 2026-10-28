@@ -1,6 +1,7 @@
 package com.mrassaf.firewall
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.TimePickerDialog
 import android.content.Intent
 import android.graphics.Color
@@ -10,6 +11,8 @@ import android.content.res.ColorStateList
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -24,6 +27,7 @@ import android.widget.TextView
 import android.widget.Toast
 import android.text.InputType
 import java.util.Locale
+import java.util.UUID
 
 class MainActivity : Activity() {
     private lateinit var listContainer: LinearLayout
@@ -44,6 +48,27 @@ class MainActivity : Activity() {
     private var endHour = 7
     private var endMinute = 0
     private val appRows = mutableListOf<Pair<String, View>>()
+    private val telemetryHandler = Handler(Looper.getMainLooper())
+    private val telemetryPrefs by lazy { getSharedPreferences("assaf_telemetry", MODE_PRIVATE) }
+    private val telemetryTask = object : Runnable {
+        override fun run() {
+            if (telemetryPrefs.getBoolean("enabled", false)) {
+                Thread {
+                    runCatching {
+                        val installId = telemetryPrefs.getString("install_id", null)
+                            ?: UUID.randomUUID().toString().replace("-", "").also {
+                                telemetryPrefs.edit().putString("install_id", it).apply()
+                            }
+                        val version = runCatching {
+                            packageManager.getPackageInfo(packageName, 0).versionName ?: "unknown"
+                        }.getOrDefault("unknown")
+                        AssafApiClient.pingTelemetry(installId, version)
+                    }
+                }.start()
+                telemetryHandler.postDelayed(this, 2 * 60 * 1000L)
+            }
+        }
+    }
 
     private val navy = Color.rgb(9, 17, 32)
     private val panel = Color.rgb(18, 31, 52)
@@ -62,6 +87,37 @@ class MainActivity : Activity() {
         endMinute = prefs.getInt(KEY_END_MINUTE, 0)
         buildUi()
         if (currentScreen == "apps") loadApps()
+        if (!telemetryPrefs.getBoolean("choice_made", false)) showTelemetryConsent()
+    }
+
+    private fun showTelemetryConsent() {
+        AlertDialog.Builder(this)
+            .setTitle(tr("Help improve ASSAF", "ساعدنا على تحسين ASSAF"))
+            .setMessage(tr(
+                "Allow anonymous usage statistics? ASSAF will send a random installation ID, app version, and last-active time so the owner can count active installations. It will not send your app list, blocked apps, messages, or browsing activity. You can decline and still use the app.",
+                "هل تسمح بإرسال إحصائيات استخدام مجهولة؟ سيرسل ASSAF معرّف تثبيت عشوائيًا وإصدار التطبيق وآخر وقت نشاط حتى يتمكن المالك من حساب الأجهزة النشطة. لن يرسل قائمة تطبيقاتك أو التطبيقات المحظورة أو رسائلك أو نشاط التصفح. يمكنك الرفض والاستمرار باستخدام التطبيق."
+            ))
+            .setPositiveButton(tr("Allow", "سماح")) { _, _ ->
+                telemetryPrefs.edit().putBoolean("choice_made", true).putBoolean("enabled", true).apply()
+                telemetryHandler.removeCallbacks(telemetryTask)
+                telemetryHandler.post(telemetryTask)
+            }
+            .setNegativeButton(tr("Not now", "ليس الآن")) { _, _ ->
+                telemetryPrefs.edit().putBoolean("choice_made", true).putBoolean("enabled", false).apply()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        telemetryHandler.removeCallbacks(telemetryTask)
+        if (telemetryPrefs.getBoolean("enabled", false)) telemetryHandler.post(telemetryTask)
+    }
+
+    override fun onPause() {
+        telemetryHandler.removeCallbacks(telemetryTask)
+        super.onPause()
     }
 
     @Deprecated("Use platform callback; kept compatible without AndroidX dependency")
