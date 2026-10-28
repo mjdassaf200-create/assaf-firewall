@@ -49,6 +49,12 @@ object AssafApiClient {
 
     fun checkHealth(): String = request("GET", "/health")
 
+    fun pingTelemetry(installId: String, appVersion: String) {
+        request("POST", "/v1/telemetry/ping", body = JSONObject()
+            .put("install_id", installId)
+            .put("app_version", appVersion))
+    }
+
     fun authenticate(email: String, password: String, register: Boolean): String {
         val path = if (register) "/v1/auth/register" else "/v1/auth/login"
         val result = JSONObject(request("POST", path, body = JSONObject()
