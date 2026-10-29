@@ -270,7 +270,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
-        fun toolTile(icon: String, english: String, arabicLabel: String, screen: String): LinearLayout {
+        fun toolTile(iconRes: Int, english: String, arabicLabel: String, screen: String): LinearLayout {
             val tile = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
@@ -286,12 +286,11 @@ class MainActivity : Activity() {
                 setOnClickListener { goTo(screen) }
                 setPadding(dp(6), dp(8), dp(6), dp(8))
             }
-            tile.addView(TextView(this).apply {
-                text = icon
-                textSize = 29f
-                gravity = Gravity.CENTER
-                setTextColor(white)
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            tile.addView(ImageView(this).apply {
+                setImageResource(iconRes)
+                contentDescription = tr(english, arabicLabel)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }, LinearLayout.LayoutParams(dp(48), dp(48)))
             tile.addView(TextView(this).apply {
                 text = tr(english, arabicLabel)
                 textSize = 13f
@@ -305,9 +304,9 @@ class MainActivity : Activity() {
             return tile
         }
         val rows = listOf(
-            listOf(toolTile("🛡️", "ASSAF Shield", "درع عساف", "shield"), toolTile("🔗", "Link Check", "فحص الروابط", "link")),
-            listOf(toolTile("📊", "Privacy Report", "تقرير الخصوصية", "privacy"), toolTile("📶", "Wi-Fi Check", "فحص الواي فاي", "wifi")),
-            listOf(toolTile("📱", "Applications", "التطبيقات", "apps"), toolTile("⚙️", "Settings", "الإعدادات", "settings"))
+            listOf(toolTile(R.drawable.ic_assaf_shield, "ASSAF Shield", "درع عساف", "shield"), toolTile(R.drawable.ic_assaf_link, "Link Check", "فحص الروابط", "link")),
+            listOf(toolTile(R.drawable.ic_assaf_privacy, "Privacy Report", "تقرير الخصوصية", "privacy"), toolTile(R.drawable.ic_assaf_wifi, "Wi-Fi Check", "فحص الواي فاي", "wifi")),
+            listOf(toolTile(R.drawable.ic_assaf_apps, "Applications", "التطبيقات", "apps"), toolTile(R.drawable.ic_assaf_settings, "Settings", "الإعدادات", "settings"))
         )
         rows.forEach { row ->
             val rowLayout = LinearLayout(this).apply {
@@ -325,7 +324,7 @@ class MainActivity : Activity() {
         }
         root.addView(tools, FrameLayout.LayoutParams(
             (resources.displayMetrics.widthPixels * 0.88f).toInt(),
-            (resources.displayMetrics.heightPixels * 0.40f).toInt(),
+            (resources.displayMetrics.heightPixels * 0.54f).toInt(),
             Gravity.TOP or Gravity.CENTER_HORIZONTAL
         ).apply {
             topMargin = (resources.displayMetrics.heightPixels * 0.385f).toInt()
