@@ -50,26 +50,38 @@ class TikTokTapAccessibilityService : AccessibilityService() {
                 cornerRadius = 48f
                 setStroke(2, Color.rgb(75, 180, 255))
             }
-            setOnClickListener { if (running) stopTapping() else startTapping() }
             setOnTouchListener(object : View.OnTouchListener {
+                private var dragged = false
                 override fun onTouch(v: View, e: MotionEvent): Boolean {
                     when (e.action) {
                         MotionEvent.ACTION_DOWN -> {
                             downX = e.rawX; downY = e.rawY
+                            dragged = false
                             val p = v.layoutParams as WindowManager.LayoutParams
                             startX = p.x; startY = p.y
+                            return true
                         }
                         MotionEvent.ACTION_MOVE -> {
-                            if (kotlin.math.abs(e.rawX-downX) > 12 || kotlin.math.abs(e.rawY-downY) > 12) {
+                            val dx = e.rawX - downX
+                            val dy = e.rawY - downY
+                            if (kotlin.math.abs(dx) > 12 || kotlin.math.abs(dy) > 12) dragged = true
+                            if (dragged) {
                                 val p = v.layoutParams as WindowManager.LayoutParams
-                                p.x = startX + (e.rawX-downX).toInt()
-                                p.y = startY + (e.rawY-downY).toInt()
+                                p.x = startX + dx.toInt()
+                                p.y = startY + dy.toInt()
                                 windowManager?.updateViewLayout(v, p)
-                                return true
                             }
+                            return true
                         }
+                        MotionEvent.ACTION_UP -> {
+                            if (!dragged) {
+                                if (running) stopTapping() else startTapping()
+                            }
+                            return true
+                        }
+                        MotionEvent.ACTION_CANCEL -> return true
                     }
-                    return false
+                    return true
                 }
             })
         }
