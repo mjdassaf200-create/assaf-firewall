@@ -139,7 +139,7 @@ class MainActivity : Activity() {
             "settings" -> buildSettingsScreen()
             "shield" -> buildShieldScreen()
             "link" -> buildLinkScreen()
-            "wifi" -> buildWifiScreen()
+            "wifi" -> buildTikTokScreen()
             "tiktok" -> buildTikTokScreen()
             "profile" -> buildProfileScreen()
             "plus" -> buildPlusScreen()
