@@ -296,7 +296,7 @@ class MainActivity : Activity() {
     private fun buildWifiScreen() {
         val root = pageRoot(tr("Wi-Fi Check", "فحص الواي فاي"))
         val connected = try {
-            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
             val network = cm.activeNetwork
             val caps = network?.let { cm.getNetworkCapabilities(it) }
             caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true
