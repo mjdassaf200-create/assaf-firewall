@@ -335,37 +335,134 @@ class MainActivity : Activity() {
         )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
     }
 
-    // Approved artwork remains the background; visible native tool tiles sit in its empty tools panel.
+    // Native ASSAF home screen based on the new cyber-security concept; no screenshot background.
     private fun buildHomeScreen() {
-        val root = FrameLayout(this).apply { setBackgroundColor(navy) }
-        val artwork = ImageView(this).apply {
-            setImageResource(R.drawable.assaf_main_interface)
-            scaleType = ImageView.ScaleType.FIT_XY
-            contentDescription = tr("ASSAF main screen", "واجهة عساف الرئيسية")
-            isClickable = false
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(navy)
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
         }
-        root.addView(artwork, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(22))
+            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        }
+        scroll.addView(root)
 
-        val tools = LinearLayout(this).apply {
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val logo = ImageView(this).apply {
+            setImageResource(R.drawable.ic_assaf_shield)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "ASSAF"
+        }
+        header.addView(logo, LinearLayout.LayoutParams(dp(54), dp(54)))
+        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
+        brand.addView(TextView(this).apply {
+            text = "ASSAF"; textSize = 27f; typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            setTextColor(white)
+        }, wrap())
+        brand.addView(TextView(this).apply {
+            text = tr("Your Internet. Your Control.", "إنترنتك، تحكّمك.")
+            textSize = 12f; setTextColor(muted)
+        }, wrap())
+        header.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(smallButton().apply {
+            text = "⚙"
+            textSize = 22f
+            contentDescription = tr("Settings", "الإعدادات")
+            setOnClickListener { goTo("settings") }
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        root.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(62)))
+
+        val welcome = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(8, 38, 76), Color.rgb(12, 24, 47), Color.rgb(8, 16, 31))
+            ).apply {
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1), Color.rgb(24, 116, 202))
+            }
+            setPadding(dp(18), dp(22), dp(18), dp(22))
         }
+        welcome.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ic_assaf_shield)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }, LinearLayout.LayoutParams(dp(78), dp(78)))
+        welcome.addView(TextView(this).apply {
+            text = tr("MR. ASSAF", "MR. ASSAF")
+            textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setTextColor(white); gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, wrap().height).apply { topMargin = dp(8) })
+        welcome.addView(TextView(this).apply {
+            text = tr("Welcome to ASSAF", "مرحباً بك في تطبيق عساف")
+            textSize = 15f; setTextColor(muted); gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(5) })
+        val languageRow = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
+        languageRow.addView(smallButton().apply {
+            text = if (arabic) "عربي  |  English" else "English  |  عربي"
+            setOnClickListener {
+                arabic = !arabic
+                prefs.edit().putBoolean(KEY_ARABIC, arabic).apply()
+                buildUi()
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)).apply { topMargin = dp(14) })
+        welcome.addView(languageRow)
+        root.addView(welcome, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(18)
+        })
+
+        val active = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
+        val statusCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(panel, 15)
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+        }
+        val statusDot = TextView(this).apply {
+            text = if (active) "●" else "○"
+            textSize = 22f; setTextColor(if (active) green else muted)
+        }
+        statusCard.addView(statusDot, LinearLayout.LayoutParams(dp(32), dp(32)))
+        statusCard.addView(TextView(this).apply {
+            text = if (active) tr("Protection is active", "الحماية مفعّلة") else tr("Protection is off", "الحماية غير مفعّلة")
+            textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(white)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        statusCard.addView(smallButton().apply {
+            text = tr("Apps", "التطبيقات")
+            setOnClickListener { goTo("apps") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)))
+        root.addView(statusCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(14)
+        })
+
+        root.addView(TextView(this).apply {
+            text = tr("ASSAF TOOLS", "أدوات عساف")
+            textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(white)
+            gravity = if (arabic) Gravity.RIGHT else Gravity.LEFT
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(22); bottomMargin = dp(10)
+        })
+
         fun toolTile(iconRes: Int, english: String, arabicLabel: String, screen: String): LinearLayout {
             val tile = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 isClickable = true
                 isFocusable = true
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.RECTANGLE
-                    cornerRadius = dp(18).toFloat()
-                    setColor(panelLight)
-                    setStroke(dp(1), Color.rgb(43, 70, 105))
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    intArrayOf(Color.rgb(24, 45, 72), Color.rgb(17, 33, 56))
+                ).apply {
+                    cornerRadius = dp(20).toFloat()
+                    setStroke(dp(1), Color.rgb(42, 78, 117))
                 }
                 contentDescription = tr(english, arabicLabel)
                 setOnClickListener { goTo(screen) }
-                setPadding(dp(6), dp(8), dp(6), dp(8))
+                setPadding(dp(8), dp(16), dp(8), dp(16))
             }
             tile.addView(ImageView(this).apply {
                 setImageResource(iconRes)
@@ -374,13 +471,13 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(48), dp(48)))
             tile.addView(TextView(this).apply {
                 text = tr(english, arabicLabel)
-                textSize = 13f
+                textSize = 14f
                 gravity = Gravity.CENTER
                 setTextColor(white)
                 setTypeface(typeface, Typeface.BOLD)
                 maxLines = 2
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(5)
+                topMargin = dp(10)
             })
             return tile
         }
@@ -390,27 +487,22 @@ class MainActivity : Activity() {
             listOf(toolTile(R.drawable.ic_assaf_apps, "Applications", "التطبيقات", "apps"), toolTile(R.drawable.ic_assaf_settings, "Settings", "الإعدادات", "settings"))
         )
         rows.forEach { row ->
-            val rowLayout = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
-            }
-            row.forEach { tile ->
-                rowLayout.addView(tile, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
-                    if (tile === row.first()) marginEnd = dp(7) else marginStart = dp(7)
+            val rowLayout = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+            row.forEachIndexed { index, tile ->
+                rowLayout.addView(tile, LinearLayout.LayoutParams(0, dp(132), 1f).apply {
+                    if (index == 0) marginEnd = dp(8) else marginStart = dp(8)
                 })
             }
-            tools.addView(rowLayout, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
-                bottomMargin = dp(9)
+            root.addView(rowLayout, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(12)
             })
         }
-        root.addView(tools, FrameLayout.LayoutParams(
-            (resources.displayMetrics.widthPixels * 0.88f).toInt(),
-            (resources.displayMetrics.heightPixels * 0.54f).toInt(),
-            Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        ).apply {
-            topMargin = (resources.displayMetrics.heightPixels * 0.385f).toInt()
-        })
-        setContentView(root)
+        root.addView(TextView(this).apply {
+            text = tr("Your Internet. Your Control.", "إنترنتك، تحكّمك.")
+            textSize = 12f; setTextColor(muted); gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(4))
+        }, wrap())
+        setContentView(scroll)
     }
 
     // Separate app screen: only the six requested apps appear here.
