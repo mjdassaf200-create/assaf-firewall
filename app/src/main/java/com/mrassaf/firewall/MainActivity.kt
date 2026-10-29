@@ -272,8 +272,8 @@ class MainActivity : Activity() {
     private fun buildLinkScreen() {
         val root = pageRoot(tr("Link Check", "فحص الروابط"))
         val intro = infoCard(tr(
-            "Deep preliminary report: domain registration and public DNS details. The site itself is not opened and threat databases are not queried yet.",
-            "تقرير مبدئي مفصّل: بيانات تسجيل النطاق وDNS العام. لن نفتح الموقع نفسه، وقواعد التهديدات المباشرة غير موصولة بعد."
+            "Preliminary link assessment. A score is based only on the indicators this check can currently observe; live phishing/malware databases are not connected yet.",
+            "تقييم مبدئي للرابط. الدرجة مبنية فقط على المؤشرات التي يستطيع الفحص رصدها حالياً؛ قواعد التصيّد والبرمجيات الخبيثة المباشرة غير موصولة بعد."
         ))
         root.addView(intro, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
         val input = EditText(this).apply {
@@ -283,10 +283,11 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(12), dp(14), dp(12)); background = rounded(panel, 14)
         }
         root.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)))
+        val check = primaryButton(tr("Analyze link", "افحص الرابط"))
+        root.addView(check, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(12) })
         val report = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(report, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
-        val check = primaryButton(tr("Analyze link", "حلّل الرابط"))
-        root.addView(check, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(12) })
+
         check.setOnClickListener {
             val value = input.text.toString().trim()
             if (value.isBlank()) {
@@ -294,19 +295,19 @@ class MainActivity : Activity() {
                 return@setOnClickListener
             }
             check.isEnabled = false
-            check.text = tr("Analyzing…", "جاري التحليل…")
+            check.text = tr("Checking…", "جاري الفحص…")
             report.removeAllViews()
-            report.addView(infoCard(tr("Collecting public domain data…", "جاري جمع بيانات النطاق العامة…")))
+            report.addView(infoCard(tr("Checking the link indicators…", "جاري فحص مؤشرات الرابط…")))
             Thread {
                 val response = runCatching { AssafApiClient.analyzeLink(value) }
                 runOnUiThread {
                     check.isEnabled = true
-                    check.text = tr("Analyze link", "حلّل الرابط")
+                    check.text = tr("Analyze link", "افحص الرابط")
                     report.removeAllViews()
                     if (response.isFailure) {
                         report.addView(infoCard(tr(
-                            "Could not complete the lookup: ${response.exceptionOrNull()?.message ?: "Unknown error"}. Check the connection and API service.",
-                            "تعذّر إكمال الفحص: ${response.exceptionOrNull()?.message ?: "خطأ غير معروف"}. تأكد من الاتصال وخدمة API."
+                            "The check could not be completed. No safety conclusion can be made. Details: ${response.exceptionOrNull()?.message ?: "Unknown error"}",
+                            "تعذّر إكمال الفحص، لذلك لا يمكن إصدار حكم على أمان الرابط. التفاصيل: ${response.exceptionOrNull()?.message ?: "خطأ غير معروف"}"
                         )))
                     } else {
                         val data = response.getOrThrow()
@@ -317,6 +318,76 @@ class MainActivity : Activity() {
                         val urls = data.optJSONArray("query_parameters") ?: org.json.JSONArray()
                         val dns = domain.optJSONArray("public_dns_addresses") ?: org.json.JSONArray()
                         val nameservers = registration.optJSONArray("nameservers") ?: org.json.JSONArray()
+
+                        fun arrValues(array: org.json.JSONArray): List<String> =
+                            (0 until array.length()).mapNotNull { i ->
+                                array.optString(i).takeIf { it.isNotBlank() && it != "null" }
+                            }
+                        val flagObjects = (0 until flags.length()).mapNotNull { flags.optJSONObject(it) }
+                        val flagCodes = flagObjects.map { it.optString("code") }.toSet()
+                        var score = 100
+                        if ("no_https" in flagCodes) score -= 20
+                        if ("at_symbol" in flagCodes) score -= 20
+                        if ("idn_punycode" in flagCodes) score -= 15
+                        if ("long_hostname" in flagCodes) score -= 10
+                        if ("dns_unresolved" in flagCodes) score -= 20
+                        score = score.coerceIn(0, 100)
+                        val hasWarning = flagObjects.any { it.optString("level") == "warning" || it.optString("level") == "review" }
+                        val scoreColor = when {
+                            hasWarning || score < 70 -> Color.rgb(239, 68, 68)
+                            score < 90 -> Color.rgb(213, 168, 62)
+                            else -> green
+                        }
+                        val verdict = when {
+                            hasWarning || score < 70 -> tr("Caution — suspicious indicators found", "تحذير — تم رصد مؤشرات تستدعي الحذر")
+                            score < 90 -> tr("Review carefully", "راجع الرابط بحذر")
+                            else -> tr("No basic warning detected — not proof of safety", "لم يظهر تحذير أساسي — وهذا لا يثبت الأمان")
+                        }
+                        val scoreCard = LinearLayout(this).apply {
+                            orientation = LinearLayout.VERTICAL
+                            gravity = Gravity.CENTER
+                            setPadding(dp(18), dp(18), dp(18), dp(18))
+                            background = rounded(panel, 18)
+                        }
+                        scoreCard.addView(TextView(this).apply {
+                            text = tr("SECURITY SCORE", "درجة الأمان")
+                            textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(muted); gravity = Gravity.CENTER
+                        })
+                        scoreCard.addView(TextView(this).apply {
+                            text = "$score / 100"
+                            textSize = 34f; typeface = Typeface.DEFAULT_BOLD; setTextColor(scoreColor); gravity = Gravity.CENTER
+                            setPadding(0, dp(6), 0, dp(4))
+                        })
+                        scoreCard.addView(TextView(this).apply {
+                            text = verdict
+                            textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(scoreColor); gravity = Gravity.CENTER
+                        })
+                        scoreCard.addView(TextView(this).apply {
+                            text = tr("Preliminary score only. ASSAF has not checked live threat-intelligence databases, opened the page, validated TLS, or followed redirects.",
+                                "الدرجة مبدئية فقط. لم يفحص ASSAF قواعد تهديدات مباشرة، ولم يفتح الصفحة أو يتحقق من شهادة TLS أو يتتبع التحويلات.")
+                            textSize = 12f; setTextColor(muted); gravity = Gravity.CENTER
+                            setPadding(0, dp(10), 0, 0)
+                        })
+                        report.addView(scoreCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
+
+                        if (hasWarning) {
+                            val warningCard = LinearLayout(this).apply {
+                                orientation = LinearLayout.VERTICAL
+                                setPadding(dp(14), dp(14), dp(14), dp(14))
+                                background = rounded(Color.rgb(105, 28, 35), 16)
+                            }
+                            warningCard.addView(TextView(this).apply {
+                                text = tr("SECURITY WARNING", "تحذير أمني")
+                                textSize = 17f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
+                            })
+                            warningCard.addView(TextView(this).apply {
+                                text = tr("Potentially risky indicators were found. Do not enter passwords or payment details until you verify the link. This is not confirmation of a known live threat.",
+                                    "تم العثور على مؤشرات قد تدل على خطورة. لا تدخل كلمات المرور أو بيانات الدفع قبل التأكد من الرابط. هذا ليس تأكيداً لوجود تهديد مباشر معروف.")
+                                textSize = 14f; setTextColor(Color.WHITE); setPadding(0, dp(7), 0, 0)
+                            })
+                            report.addView(warningCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
+                        }
+
                         fun addSection(title: String, lines: List<String>) {
                             val card = LinearLayout(this).apply {
                                 orientation = LinearLayout.VERTICAL
@@ -334,7 +405,7 @@ class MainActivity : Activity() {
                             }
                             report.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
                         }
-                        fun arrValues(array: org.json.JSONArray): List<String> = (0 until array.length()).mapNotNull { i -> array.optString(i).takeIf { it.isNotBlank() && it != "null" } }
+
                         addSection(tr("01 • Link identity", "01 • هوية الرابط"), listOf(
                             "${tr("Submitted", "الرابط المدخل")}: ${data.optString("submitted_url")}",
                             "${tr("Normalized", "الرابط بعد الترتيب")}: ${data.optString("normalized_url")}",
@@ -359,13 +430,12 @@ class MainActivity : Activity() {
                             "${tr("Lookup status", "حالة الاستعلام")}: ${registration.optString("status")}",
                             "${tr("Registered domain", "النطاق المسجل")}: ${registration.optString("domain_name")}",
                             "${tr("Registry handle", "معرّف السجل")}: ${registration.optString("handle")}",
-                            "${tr("Name servers", "خوادم الأسماء")}: ${nameservers.let { arrValues(it).joinToString().ifBlank { tr("Not available", "غير متاح") } }}",
+                            "${tr("Name servers", "خوادم الأسماء")}: ${arrValues(nameservers).joinToString().ifBlank { tr("Not available", "غير متاح") }}",
                             *eventLines.toTypedArray(),
                             registration.optString("disclaimer"),
                             registration.optString("reason")
                         ))
-                        val flagLines = (0 until flags.length()).map { i ->
-                            val f = flags.optJSONObject(i) ?: org.json.JSONObject()
+                        val flagLines = flagObjects.map { f ->
                             "• [${f.optString("level")}] ${f.optString("code")}: ${f.optString("detail")}"
                         }
                         addSection(tr("04 • Security indicators", "04 • مؤشرات الأمان"), listOf(
@@ -374,14 +444,16 @@ class MainActivity : Activity() {
                             *flagLines.toTypedArray(),
                             security.optString("important")
                         ))
-                        addSection(tr("05 • URL parameters", "05 • معاملات الرابط"), if (urls.length() == 0) listOf(tr("No query parameters found.", "لا توجد معاملات إضافية في الرابط.")) else (0 until urls.length()).map { i ->
+                        addSection(tr("05 • URL parameters", "05 • معاملات الرابط"), if (urls.length() == 0)
+                            listOf(tr("No query parameters found.", "لا توجد معاملات إضافية في الرابط."))
+                        else (0 until urls.length()).map { i ->
                             val p = urls.optJSONObject(i) ?: org.json.JSONObject()
                             "${p.optString("name")} = ${p.optString("value")}"
                         })
                         addSection(tr("06 • Data sources & limitations", "06 • مصادر البيانات والحدود"), listOf(
                             "${tr("Generated at", "وقت إنشاء التقرير")}: ${data.optString("generated_at")}",
                             "${tr("Sources", "المصادر")}: ${arrValues(data.optJSONArray("data_sources") ?: org.json.JSONArray()).joinToString()}",
-                            tr("The report does not yet check a live phishing/malware reputation feed, inspect page contents, validate the TLS certificate, or follow redirects. A clean preliminary result is not proof of safety.", "التقرير لا يفحص بعد قواعد تصيّد/برمجيات خبيثة مباشرة، ولا يقرأ محتوى الصفحة أو يتحقق من شهادة TLS أو يتتبع التحويلات. النتيجة المبدئية النظيفة لا تثبت أن الموقع آمن.")
+                            tr("No basic warning is not the same as safe. Live phishing/malware reputation, page content, TLS certificate, and redirect checks are not available yet.", "عدم ظهور تحذير أساسي لا يعني أن الرابط آمن. فحص سمعة التصيّد والبرمجيات الخبيثة المباشر ومحتوى الصفحة وشهادة TLS والتحويلات غير متاح بعد.")
                         ))
                     }
                 }
