@@ -272,8 +272,8 @@ class MainActivity : Activity() {
     private fun buildLinkScreen() {
         val root = pageRoot(tr("Link Check", "فحص الروابط"))
         val intro = infoCard(tr(
-            "Preliminary link assessment. A score is based only on the indicators this check can currently observe; live phishing/malware databases are not connected yet.",
-            "تقييم مبدئي للرابط. الدرجة مبنية فقط على المؤشرات التي يستطيع الفحص رصدها حالياً؛ قواعد التصيّد والبرمجيات الخبيثة المباشرة غير موصولة بعد."
+            "ASSAF checks URL patterns, domain/DNS signals, and known-threat reputation when configured. A high score is not a guarantee; if threat reputation is unavailable, the result remains preliminary.",
+            "يفحص ASSAF أنماط الرابط ومؤشرات النطاق وDNS وسمعة التهديدات المعروفة عند تفعيل المصدر. الدرجة العالية ليست ضماناً؛ وإذا تعذّر فحص السمعة تبقى النتيجة مبدئية."
         ))
         root.addView(intro, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
         val input = EditText(this).apply {
@@ -325,23 +325,22 @@ class MainActivity : Activity() {
                             }
                         val flagObjects = (0 until flags.length()).mapNotNull { flags.optJSONObject(it) }
                         val flagCodes = flagObjects.map { it.optString("code") }.toSet()
-                        var score = 100
-                        if ("no_https" in flagCodes) score -= 20
-                        if ("at_symbol" in flagCodes) score -= 20
-                        if ("idn_punycode" in flagCodes) score -= 15
-                        if ("long_hostname" in flagCodes) score -= 10
-                        if ("dns_unresolved" in flagCodes) score -= 20
-                        score = score.coerceIn(0, 100)
-                        val hasWarning = flagObjects.any { it.optString("level") == "warning" || it.optString("level") == "review" }
+                        val threatIntel = security.optJSONObject("threat_intelligence") ?: org.json.JSONObject()
+                        val threatStatus = threatIntel.optString("status", "not_checked")
+                        val knownThreat = threatStatus == "malicious"
+                        val score = security.optInt("score", 70).coerceIn(0, 100)
+                        val hasWarning = knownThreat || flagObjects.any { it.optString("level") == "warning" || it.optString("level") == "review" }
                         val scoreColor = when {
-                            hasWarning || score < 70 -> Color.rgb(239, 68, 68)
-                            score < 90 -> Color.rgb(213, 168, 62)
+                            knownThreat || score < 50 -> Color.rgb(239, 68, 68)
+                            hasWarning || score < 80 -> Color.rgb(213, 168, 62)
                             else -> green
                         }
                         val verdict = when {
-                            hasWarning || score < 70 -> tr("Caution — suspicious indicators found", "تحذير — تم رصد مؤشرات تستدعي الحذر")
-                            score < 90 -> tr("Review carefully", "راجع الرابط بحذر")
-                            else -> tr("No basic warning detected — not proof of safety", "لم يظهر تحذير أساسي — وهذا لا يثبت الأمان")
+                            knownThreat -> tr("Known threat reported", "تم الإبلاغ عن تهديد معروف")
+                            score < 50 -> tr("High risk indicators — avoid this link", "مؤشرات خطورة مرتفعة — تجنّب الرابط")
+                            hasWarning || score < 80 -> tr("Caution — review the indicators", "حذر — راجع المؤشرات")
+                            threatStatus != "clean" -> tr("Preliminary only — threat reputation not confirmed", "نتيجة مبدئية — لم يتم تأكيد سمعة الرابط")
+                            else -> tr("No known threat found by the connected source — not a guarantee", "لم يرصد المصدر المتصل تهديداً معروفاً — وهذا ليس ضماناً")
                         }
                         val scoreCard = LinearLayout(this).apply {
                             orientation = LinearLayout.VERTICAL
@@ -363,8 +362,11 @@ class MainActivity : Activity() {
                             textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(scoreColor); gravity = Gravity.CENTER
                         })
                         scoreCard.addView(TextView(this).apply {
-                            text = tr("Preliminary score only. ASSAF has not checked live threat-intelligence databases, opened the page, validated TLS, or followed redirects.",
-                                "الدرجة مبدئية فقط. لم يفحص ASSAF قواعد تهديدات مباشرة، ولم يفتح الصفحة أو يتحقق من شهادة TLS أو يتتبع التحويلات.")
+                            text = when (threatStatus) {
+                                "malicious" -> tr("A connected threat-reputation source reported this URL. Treat it as dangerous; avoid opening it.", "مصدر سمعة التهديدات المتصل أبلغ عن هذا الرابط. تعامل معه كخطر وتجنّب فتحه.")
+                                "clean" -> tr("A known-threat lookup returned no match. The page content, TLS, and redirects are not fully verified; this is not a safety guarantee.", "لم يعثر فحص التهديدات المعروف على تطابق. لم يتم التحقق الكامل من محتوى الصفحة أو TLS أو التحويلات؛ وهذه ليست ضمانة أمان.")
+                                else -> tr("Threat reputation could not be confirmed. This is an indicator score, not proof of safety; do not enter sensitive information on uncertain links.", "تعذّر تأكيد سمعة التهديدات. هذه درجة للمؤشرات وليست إثباتاً للأمان؛ لا تدخل بيانات حساسة في رابط غير موثوق.")
+                            }
                             textSize = 12f; setTextColor(muted); gravity = Gravity.CENTER
                             setPadding(0, dp(10), 0, 0)
                         })
@@ -381,8 +383,8 @@ class MainActivity : Activity() {
                                 textSize = 17f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
                             })
                             warningCard.addView(TextView(this).apply {
-                                text = tr("Potentially risky indicators were found. Do not enter passwords or payment details until you verify the link. This is not confirmation of a known live threat.",
-                                    "تم العثور على مؤشرات قد تدل على خطورة. لا تدخل كلمات المرور أو بيانات الدفع قبل التأكد من الرابط. هذا ليس تأكيداً لوجود تهديد مباشر معروف.")
+                                text = if (knownThreat) tr("A connected threat-reputation source matched this URL to a known threat. Do not open it or enter any information.", "طابق مصدر سمعة التهديدات المتصل هذا الرابط مع تهديد معروف. لا تفتحه ولا تدخل أي معلومات.")
+                                    else tr("Suspicious indicators were found, but these indicators alone do not prove the site is malicious. Avoid passwords, payment details, and downloads until independently verified.", "تم العثور على مؤشرات مريبة، لكنها وحدها لا تثبت أن الموقع خبيث. تجنّب كلمات المرور وبيانات الدفع والتنزيلات حتى يتم التحقق منه بشكل مستقل.")
                                 textSize = 14f; setTextColor(Color.WHITE); setPadding(0, dp(7), 0, 0)
                             })
                             report.addView(warningCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
