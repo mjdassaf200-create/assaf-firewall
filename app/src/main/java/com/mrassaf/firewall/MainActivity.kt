@@ -278,6 +278,11 @@ class MainActivity : Activity() {
             textSize = 12f
             setTextColor(muted)
         }, wrap())
+        header.addView(ImageView(this).apply {
+            setImageResource(R.drawable.assaf_logo)
+            contentDescription = "ASSAF"
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(10) })
         header.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         header.addView(smallButton().apply {
             text = "⚙"
@@ -298,15 +303,15 @@ class MainActivity : Activity() {
             setTextColor(Color.rgb(205, 174, 120))
         }, wrap())
         hero.addView(TextView(this).apply {
-            text = if (active) tr("الحماية تعمل", "الحماية تعمل") else tr("الحماية غير مفعّلة", "الحماية غير مفعّلة")
+            text = if (active) tr("Protection is active", "الحماية تعمل") else tr("Protection is off", "الحماية غير مفعّلة")
             textSize = 21f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setTextColor(white)
         }, wrap())
         hero.addView(TextView(this).apply {
-            text = if (active) tr("خدمة جدار الحماية مفعّلة على الجهاز", "خدمة جدار الحماية مفعّلة على الجهاز")
-                else tr("فعّل الحماية من صفحة التطبيقات لبدء التحكم", "فعّل الحماية من صفحة التطبيقات لبدء التحكم")
+            text = if (active) tr("Firewall service is active on this device", "خدمة جدار الحماية مفعّلة على الجهاز")
+                else tr("Open Apps to choose apps and start protection", "افتح التطبيقات لاختيار التطبيقات وبدء الحماية")
             textSize = 13f
             gravity = Gravity.CENTER
             setTextColor(muted)
@@ -317,11 +322,11 @@ class MainActivity : Activity() {
         root.addView(hero, heroParams)
 
         sectionTitle(root, tr("أدوات ASSAF", "أدوات ASSAF"))
-        addFeatureCard(root, "◈", tr("درع ASSAF", "درع ASSAF"), tr("حالة الحماية والتحكم", "حالة الحماية والتحكم"), "shield")
-        addFeatureCard(root, "↗", tr("فحص الروابط", "فحص الروابط"), tr("تحقّق من مؤشرات الرابط قبل فتحه", "تحقّق من مؤشرات الرابط قبل فتحه"), "link")
-        addFeatureCard(root, "▤", tr("تقرير الخصوصية", "تقرير الخصوصية"), tr("ملخص بيانات الحجب المتاحة", "ملخص بيانات الحجب المتاحة"), "privacy")
-        addFeatureCard(root, "⌁", tr("فحص شبكة Wi-Fi", "فحص شبكة Wi-Fi"), tr("اعرض معلومات الاتصال المتاحة", "اعرض معلومات الاتصال المتاحة"), "wifi")
-        addFeatureCard(root, "▦", tr("التحكم بالإنترنت", "التحكم بالإنترنت"), tr("إدارة اتصال التطبيقات", "إدارة اتصال التطبيقات"), "apps")
+        addFeatureCard(root, "◈", tr("ASSAF Shield", "درع ASSAF"), tr("Protection status and controls", "حالة الحماية والتحكم"), "shield")
+        addFeatureCard(root, "↗", tr("Link Check", "فحص الروابط"), tr("Check basic link warning signs", "تحقّق من مؤشرات الرابط قبل فتحه"), "link")
+        addFeatureCard(root, "▤", tr("Privacy report", "تقرير الخصوصية"), tr("A summary of available blocking data", "ملخص بيانات الحجب المتاحة"), "privacy")
+        addFeatureCard(root, "⌁", tr("Wi-Fi check", "فحص شبكة Wi-Fi"), tr("View available connection details", "اعرض معلومات الاتصال المتاحة"), "wifi")
+        addFeatureCard(root, "▦", tr("Internet control", "التحكم بالإنترنت"), tr("Manage app internet access", "إدارة اتصال التطبيقات"), "apps")
 
         val nav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
