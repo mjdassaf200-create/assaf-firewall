@@ -175,10 +175,10 @@ class MainActivity : Activity() {
     }
 
     private fun buildStatsScreen() {
-        val root = pageRoot(tr("Network statistics", "إحصائيات الشبكة"))
+        val root = pageRoot(if (currentScreen == "privacy") tr("Privacy report", "تقرير الخصوصية") else tr("Network statistics", "إحصائيات الشبكة"))
         statsText = infoCard("")
         root.addView(statsText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(14) })
-        root.addView(primaryButton(tr("Refresh statistics", "تحديث الإحصائيات")).apply { setOnClickListener { updateStats() } },
+        root.addView(primaryButton(if (currentScreen == "privacy") tr("Refresh report", "تحديث التقرير") else tr("Refresh statistics", "تحديث الإحصائيات")).apply { setOnClickListener { updateStats() } },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
         updateStats()
     }
@@ -335,7 +335,7 @@ class MainActivity : Activity() {
             Triple("●", tr("حسابي", "حسابي"), "profile")
         ).forEach { item ->
             val b = smallButton().apply {
-                text = item.first + "\\n" + item.second
+                text = item.first + "\n" + item.second
                 textSize = 11f
                 setOnClickListener { goTo(item.third) }
             }
@@ -397,7 +397,7 @@ class MainActivity : Activity() {
         val active = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
         root.addView(infoCard(
             (if (active) "● " + tr("الحماية مفعّلة", "الحماية مفعّلة") else "○ " + tr("الحماية متوقفة", "الحماية متوقفة")) +
-            "\\n\\n" + tr("يتحكم جدار الحماية بالتطبيقات التي اخترتها في صفحة التطبيقات.", "يتحكم جدار الحماية بالتطبيقات التي اخترتها في صفحة التطبيقات.")
+            "\n\n" + tr("يتحكم جدار الحماية بالتطبيقات التي اخترتها في صفحة التطبيقات.", "يتحكم جدار الحماية بالتطبيقات التي اخترتها في صفحة التطبيقات.")
         ), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(14) })
         root.addView(primaryButton(tr("إدارة التطبيقات", "إدارة التطبيقات")).apply { setOnClickListener { goTo("apps") } },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
@@ -437,11 +437,11 @@ class MainActivity : Activity() {
                 val host = uri?.host.orEmpty()
                 val warnings = mutableListOf<String>()
                 if (raw.isBlank() || host.isBlank()) warnings.add(tr("الرابط غير مكتمل أو غير صالح.", "الرابط غير مكتمل أو غير صالح."))
-                if (host.matches(Regex("""\\d{1,3}(\\.\\d{1,3}){3}"""))) warnings.add(tr("الرابط يستخدم عنوان IP مباشرة؛ تحقق منه قبل المتابعة.", "الرابط يستخدم عنوان IP مباشرة؛ تحقق منه قبل المتابعة."))
+                if (host.matches(Regex("""\d{1,3}(\.\d{1,3}){3}"""))) warnings.add(tr("الرابط يستخدم عنوان IP مباشرة؛ تحقق منه قبل المتابعة.", "الرابط يستخدم عنوان IP مباشرة؛ تحقق منه قبل المتابعة."))
                 if (host.startsWith("xn--") || host.contains(".xn--")) warnings.add(tr("يحتوي النطاق على أحرف دولية مشفّرة؛ تحقق من اسم الموقع بعناية.", "يحتوي النطاق على أحرف دولية مشفّرة؛ تحقق من اسم الموقع بعناية."))
                 if (uri?.scheme != "https") warnings.add(tr("الرابط لا يستخدم HTTPS.", "الرابط لا يستخدم HTTPS."))
                 result.text = if (warnings.isEmpty()) tr("لم تظهر مؤشرات تنسيق واضحة، لكن لم يتم التحقق من سمعة الرابط عبر الإنترنت. لا تعتبره آمناً بناءً على هذا الفحص وحده.", "لم تظهر مؤشرات تنسيق واضحة، لكن لم يتم التحقق من سمعة الرابط عبر الإنترنت. لا تعتبره آمناً بناءً على هذا الفحص وحده.")
-                    else warnings.distinct().joinToString("\\n\\n") + "\\n\\n" + tr("هذا فحص أولي وليس حكماً نهائياً على الرابط.", "هذا فحص أولي وليس حكماً نهائياً على الرابط.")
+                    else warnings.distinct().joinToString("\n\n") + "\n\n" + tr("هذا فحص أولي وليس حكماً نهائياً على الرابط.", "هذا فحص أولي وليس حكماً نهائياً على الرابط.")
             }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(12) })
     }
@@ -455,9 +455,9 @@ class MainActivity : Activity() {
         val wifi = caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true
         val cellular = caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) == true
         root.addView(infoCard(
-            tr("Connection status", "حالة الاتصال") + "\\n" +
-            (if (connected) tr("Connected", "متصل") else tr("No active connection", "لا يوجد اتصال نشط")) + "\\n\\n" +
-            tr("Wi-Fi", "واي فاي") + ": " + (if (wifi) tr("Active", "نشط") else tr("Not active", "غير نشط")) + "\\n" +
+            tr("Connection status", "حالة الاتصال") + "\n" +
+            (if (connected) tr("Connected", "متصل") else tr("No active connection", "لا يوجد اتصال نشط")) + "\n\n" +
+            tr("Wi-Fi", "واي فاي") + ": " + (if (wifi) tr("Active", "نشط") else tr("Not active", "غير نشط")) + "\n" +
             tr("Mobile data", "بيانات الهاتف") + ": " + (if (cellular) tr("Active", "نشطة") else tr("Not active", "غير نشطة"))
         ), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(infoCard(tr("ملاحظة: النسخة الحالية تعرض حالة الاتصال التي يسمح أندرويد بقراءتها، ولا تفحص تشفير شبكة Wi-Fi أو تضمن أمانها.", "ملاحظة: النسخة الحالية تعرض حالة الاتصال التي يسمح أندرويد بقراءتها، ولا تفحص تشفير شبكة Wi-Fi أو تضمن أمانها.")),
@@ -470,7 +470,7 @@ class MainActivity : Activity() {
     private fun buildProfileScreen() {
         val root = pageRoot(tr("Profile", "الملف الشخصي"))
         val email = prefs.getString(KEY_ACCOUNT_EMAIL, null)
-        root.addView(infoCard("ASSAF\\n" + (email ?: tr("ضيف ASSAF", "ضيف ASSAF"))),
+        root.addView(infoCard("ASSAF\n" + (email ?: tr("ضيف ASSAF", "ضيف ASSAF"))),
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(14) })
         root.addView(primaryButton(tr("حساب ASSAF السحابي", "حساب ASSAF السحابي")).apply { setOnClickListener { showAccountDialog() } },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
@@ -482,7 +482,7 @@ class MainActivity : Activity() {
 
     private fun buildPlusScreen() {
         val root = pageRoot(tr("ASSAF Plus", "ASSAF Plus"))
-        root.addView(infoCard(tr("مزايا مستقبلية", "مزايا مستقبلية") + "\\n\\n" +
+        root.addView(infoCard(tr("مزايا مستقبلية", "مزايا مستقبلية") + "\n\n" +
             tr("التقارير المتقدمة ومزامنة الإعدادات قيد التطوير. الدفع والاشتراكات غير مفعّلة في هذه النسخة.", "التقارير المتقدمة ومزامنة الإعدادات قيد التطوير. الدفع والاشتراكات غير مفعّلة في هذه النسخة.")),
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(primaryButton(tr("العودة للرئيسية", "العودة للرئيسية")).apply { setOnClickListener { goTo("home") } },
