@@ -395,6 +395,46 @@ class LinkCheckRequest(BaseModel):
     url: str = Field(min_length=4, max_length=2048)
 
 
+def _google_safe_browsing_lookup(url: str) -> dict:
+    """
+    Query Google Safe Browsing only when an API key is configured.
+    The submitted URL is sent to Google when this integration is enabled.
+    """
+    api_key = os.getenv("GOOGLE_SAFE_BROWSING_API_KEY", "").strip()
+    if not api_key:
+        return {
+            "status": "not_configured",
+            "source": "Google Safe Browsing",
+            "reason": "No API key configured; only local indicators were checked.",
+        }
+    endpoint = "https://safebrowsing.googleapis.com/v4/threatMatches:find?key=" + urllib.parse.quote(api_key, safe="")
+    payload = {
+        "client": {"clientId": "assaf-firewall", "clientVersion": APP_VERSION},
+        "threatInfo": {
+            "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
+            "platformTypes": ["ANY_PLATFORM"],
+            "threatEntryTypes": ["URL"],
+            "threatEntries": [{"url": url}],
+        },
+    }
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "ASSAF-LinkCheck/1.0"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            result = json.loads(response.read(100000).decode("utf-8"))
+        matches = result.get("matches") or []
+        if matches:
+            threat_types = sorted({str(match.get("threatType", "UNKNOWN")) for match in matches})
+            return {"status": "malicious", "source": "Google Safe Browsing", "threat_types": threat_types}
+        return {"status": "clean", "source": "Google Safe Browsing", "reason": "No match returned for this URL at lookup time."}
+    except (OSError, ValueError, urllib.error.URLError, TimeoutError) as exc:
+        return {"status": "unavailable", "source": "Google Safe Browsing", "reason": f"Lookup failed: {type(exc).__name__}."}
+
+
 def _public_dns_records(hostname: str) -> list[str]:
     records: set[str] = set()
     try:
@@ -481,7 +521,7 @@ def analyze_link(body: LinkCheckRequest):
         host_is_ip = False
     labels = domain.split(".")
     registrable_hint = ".".join(labels[-2:]) if len(labels) >= 2 else domain
-    # Heuristics are transparent indicators, not proof of maliciousness.
+    # Transparent heuristics: these are signals, not proof of maliciousness.
     flags = []
     if scheme == "http":
         flags.append({"level": "warning", "code": "no_https", "detail": "The submitted URL uses HTTP, so transport encryption is not indicated."})
@@ -493,8 +533,36 @@ def analyze_link(body: LinkCheckRequest):
         flags.append({"level": "review", "code": "long_hostname", "detail": "The hostname is unusually long; this alone does not indicate malicious activity."})
     if not dns_records:
         flags.append({"level": "warning", "code": "dns_unresolved", "detail": "No public DNS address was returned by this server's resolver."})
+
+    # Dynamic-DNS providers are used for legitimate and malicious purposes.
+    dynamic_dns_suffixes = (".duckdns.org", ".ddns.net", ".no-ip.org", ".hopto.org", ".zapto.org", ".dynu.net", ".servehttp.com")
+    if not host_is_ip and any(hostname.endswith(suffix) for suffix in dynamic_dns_suffixes):
+        flags.append({"level": "review", "code": "dynamic_dns", "detail": "This hostname uses a dynamic-DNS provider. This is not proof of danger, but the destination may be controlled by an individual and deserves extra scrutiny."})
+
+    query_params = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)[:80]
+    suspicious_param_names = {"cam", "camera", "webcam", "capture"}
+    if any(key.casefold() in suspicious_param_names for key, _ in query_params):
+        flags.append({"level": "review", "code": "camera_related_parameter", "detail": "A URL parameter uses a camera-related name. Parameter names alone do not prove camera access or malicious behavior."})
+
+    threat_intelligence = _google_safe_browsing_lookup(
+        urllib.parse.urlunsplit((scheme, parsed.netloc, parsed.path or "/", parsed.query, ""))
+    )
+    if threat_intelligence.get("status") == "malicious":
+        flags.append({"level": "warning", "code": "known_threat", "detail": "Google Safe Browsing reported this URL as a known threat."})
+
     if not flags:
         flags.append({"level": "info", "code": "no_simple_flags", "detail": "No basic URL-format warning was detected. This is not a clean bill of health."})
+
+    # The score is deliberately capped because this endpoint does not fetch page content,
+    # validate the TLS certificate, or follow redirects. No basic flags is not a clean bill of health.
+    if threat_intelligence.get("status") == "malicious":
+        score = 0
+    else:
+        score = 85 if threat_intelligence.get("status") == "clean" else 70
+        deductions = {"no_https": 20, "at_symbol": 20, "idn_punycode": 15, "long_hostname": 10,
+                      "dns_unresolved": 20, "dynamic_dns": 10, "camera_related_parameter": 15}
+        score -= sum(deductions.get(flag["code"], 0) for flag in flags)
+        score = max(5, min(85, score))
     query_params = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)[:80]
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -516,14 +584,15 @@ def analyze_link(body: LinkCheckRequest):
         },
         "registration": _rdap_domain(domain) if not host_is_ip else {"status": "not_applicable", "reason": "The submitted host is an IP address."},
         "security_review": {
-            "status": "preliminary_only",
+            "status": "threat_match" if threat_intelligence.get("status") == "malicious" else "preliminary_only",
+            "score": score,
             "flags": flags,
-            "threat_intelligence": "not_checked",
+            "threat_intelligence": threat_intelligence,
             "tls_certificate": "not_checked",
             "redirect_chain": "not_checked",
             "page_content": "not_fetched",
-            "confidence": "limited",
-            "important": "ASSAF did not open the submitted site or query malware/phishing reputation databases. No warning does not mean safe; HTTPS alone does not mean trustworthy.",
+            "confidence": "known_threat_match" if threat_intelligence.get("status") == "malicious" else ("limited_with_reputation_lookup" if threat_intelligence.get("status") == "clean" else "limited"),
+            "important": "A clean reputation lookup does not guarantee safety. ASSAF does not fetch page content, validate TLS, or follow redirects. A dynamic-DNS or camera-related parameter is a caution signal, not proof of maliciousness.",
         },
-        "data_sources": ["Local URL parser", "System DNS resolver", "Public RDAP endpoint (when available)"],
+        "data_sources": ["Local URL parser", "System DNS resolver", "Public RDAP endpoint (when available)"] + (["Google Safe Browsing"] if threat_intelligence.get("status") in {"clean", "malicious"} else []),
     }
