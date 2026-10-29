@@ -443,6 +443,15 @@ class MainActivity : Activity() {
         var selectedDuration = 30
         val speedButtons = linkedMapOf<Int, TextView>()
         val durationButtons = linkedMapOf<Int, TextView>()
+        val durations = listOf(10 to tr("10 sec", "10 ثواني"), 30 to tr("30 sec", "30 ثانية"), 60 to tr("1 min", "دقيقة"), 0 to tr("No limit", "مفتوح"))
+        val selectionSummary = infoCard("")
+        fun refreshSelectionSummary() {
+            val durationLabel = durations.firstOrNull { it.first == selectedDuration }?.second ?: tr("30 sec", "30 ثانية")
+            selectionSummary.text = tr(
+                "Selected: $selectedSpeed taps/second • Duration: $durationLabel",
+                "اختيارك: $selectedSpeed ضغطة بالثانية • المدة: $durationLabel"
+            )
+        }
 
         fun optionChip(label: String, selected: Boolean): TextView = TextView(this).apply {
             text = label
@@ -470,6 +479,7 @@ class MainActivity : Activity() {
             speedButtons[speed] = chip
             chip.setOnClickListener {
                 selectedSpeed = speed
+                refreshSelectionSummary()
                 speedButtons.forEach { (value, view) ->
                     val chosen = value == selectedSpeed
                     view.setTextColor(if (chosen) Color.WHITE else muted)
@@ -501,12 +511,12 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_LTR
         }
-        val durations = listOf(10 to tr("10 sec", "10 ثواني"), 30 to tr("30 sec", "30 ثانية"), 60 to tr("1 min", "دقيقة"), 0 to tr("No limit", "مفتوح"))
         durations.forEach { (seconds, label) ->
             val chip = optionChip(label, seconds == selectedDuration)
             durationButtons[seconds] = chip
             chip.setOnClickListener {
                 selectedDuration = seconds
+                refreshSelectionSummary()
                 durationButtons.forEach { (value, view) ->
                     val chosen = value == selectedDuration
                     view.setTextColor(if (chosen) Color.WHITE else muted)
@@ -525,13 +535,9 @@ class MainActivity : Activity() {
             bottomMargin = dp(16)
         })
 
-        root.addView(infoCard(tr(
-            "Ready to configure • Speed: 10 taps/second • Duration: 30 seconds",
-            "جاهز للإعداد • السرعة: 10 ضغطات بالثانية • المدة: 30 ثانية"
-        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        refreshSelectionSummary()
+        root.addView(selectionSummary, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = dp(14)
-        }.also { params ->
-            // Keep the initial status card visually compact.
         })
 
         root.addView(primaryButton(tr("Prepare tapper", "تجهيز التكبيس")).apply {
