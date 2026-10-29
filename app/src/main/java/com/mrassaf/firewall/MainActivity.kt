@@ -133,10 +133,15 @@ class MainActivity : Activity() {
     private fun buildUi() {
         when (currentScreen) {
             "apps" -> { buildAppsScreen(); loadApps() }
-            "stats" -> buildStatsScreen()
+            "stats", "privacy" -> buildStatsScreen()
             "connection" -> buildConnectionScreen()
             "schedule" -> buildScheduleScreen()
             "settings" -> buildSettingsScreen()
+            "shield" -> buildShieldScreen()
+            "link" -> buildLinkScreen()
+            "wifi" -> buildWifiScreen()
+            "profile" -> buildProfileScreen()
+            "plus" -> buildPlusScreen()
             else -> buildHomeScreen()
         }
     }
@@ -170,10 +175,10 @@ class MainActivity : Activity() {
     }
 
     private fun buildStatsScreen() {
-        val root = pageRoot(tr("Network statistics", "إحصائيات الشبكة"))
+        val root = pageRoot(if (currentScreen == "privacy") tr("Privacy report", "تقرير الخصوصية") else tr("Network statistics", "إحصائيات الشبكة"))
         statsText = infoCard("")
         root.addView(statsText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(14) })
-        root.addView(primaryButton(tr("Refresh statistics", "تحديث الإحصائيات")).apply { setOnClickListener { updateStats() } },
+        root.addView(primaryButton(if (currentScreen == "privacy") tr("Refresh report", "تحديث التقرير") else tr("Refresh statistics", "تحديث الإحصائيات")).apply { setOnClickListener { updateStats() } },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
         updateStats()
     }
@@ -236,42 +241,364 @@ class MainActivity : Activity() {
         }, wrap())
         root.addView(primaryButton(tr("ASSAF cloud account", "حساب ASSAF السحابي")).apply { setOnClickListener { showAccountDialog() } },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(14) })
+        root.addView(smallButton().apply {
+            text = tr("Protection schedule", "جدولة الحماية")
+            setOnClickListener { goTo("schedule") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
+        root.addView(smallButton().apply {
+            text = tr("Connection details", "تفاصيل الاتصال")
+            setOnClickListener { goTo("connection") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
         val active = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
         root.addView(infoCard(tr("Firewall status: " + if (active) "Active" else "Off", "حالة جدار الحماية: " + if (active) "يعمل" else "متوقف")),
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
     }
 
-    // Approved artwork stays unchanged; transparent hotspots open real screens.
-    private fun buildHomeScreen() {
-        val root = FrameLayout(this).apply { setBackgroundColor(navy) }
-        val artwork = ImageView(this).apply {
-            setImageResource(R.drawable.assaf_main_interface)
-            scaleType = ImageView.ScaleType.FIT_XY
-            contentDescription = tr("ASSAF main screen", "واجهة عساف الرئيسية")
-            isClickable = false
+    private fun buildShieldScreen() {
+        val root = pageRoot(tr("ASSAF Shield", "درع عساف"))
+        root.addView(infoCard(tr(
+            "Protection status and filtering engine",
+            "حالة الحماية ومحرك التصفية"
+        )), wrap())
+        root.addView(infoCard(tr(
+            "App internet blocking is available in the Applications screen. Ad and malicious-domain blocking needs a separate filtering engine and is not active yet.",
+            "يمكن التحكم بإنترنت التطبيقات من صفحة التطبيقات. حجب الإعلانات والنطاقات الضارة يحتاج محرك تصفية مستقل، وهو غير مفعّل حالياً."
+        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+        root.addView(primaryButton(tr("Open applications", "فتح التطبيقات")).apply {
+            setOnClickListener { goTo("apps") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(16) })
+    }
+
+    private fun buildLinkScreen() {
+        val root = pageRoot(tr("Link Check", "فحص الروابط"))
+        val intro = infoCard(tr(
+            "Deep preliminary report: domain registration and public DNS details. The site itself is not opened and threat databases are not queried yet.",
+            "تقرير مبدئي مفصّل: بيانات تسجيل النطاق وDNS العام. لن نفتح الموقع نفسه، وقواعد التهديدات المباشرة غير موصولة بعد."
+        ))
+        root.addView(intro, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
+        val input = EditText(this).apply {
+            hint = tr("Paste a public website URL", "الصق رابط موقع عام")
+            setTextColor(white); setHintTextColor(muted); textSize = 16f
+            setSingleLine(true); inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setPadding(dp(14), dp(12), dp(14), dp(12)); background = rounded(panel, 14)
         }
-        root.addView(artwork, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        fun hotspot(label: String, x: Float, y: Float, width: Float, height: Float, screen: String) {
-            val v = View(this).apply {
-                contentDescription = label; isClickable = true; isFocusable = true
-                setBackgroundColor(Color.TRANSPARENT); setOnClickListener { goTo(screen) }
+        root.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)))
+        val report = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(report, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+        val check = primaryButton(tr("Analyze link", "حلّل الرابط"))
+        root.addView(check, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(12) })
+        check.setOnClickListener {
+            val value = input.text.toString().trim()
+            if (value.isBlank()) {
+                Toast.makeText(this, tr("Enter a link first", "أدخل الرابط أولاً"), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
             }
-            root.addView(v, FrameLayout.LayoutParams(1, 1, Gravity.TOP or Gravity.START))
-            root.post {
-                if (root.width > 0 && root.height > 0) {
-                    val lp = v.layoutParams as FrameLayout.LayoutParams
-                    lp.width = (root.width * width).toInt(); lp.height = (root.height * height).toInt()
-                    lp.leftMargin = (root.width * x).toInt(); lp.topMargin = (root.height * y).toInt()
-                    v.layoutParams = lp
+            check.isEnabled = false
+            check.text = tr("Analyzing…", "جاري التحليل…")
+            report.removeAllViews()
+            report.addView(infoCard(tr("Collecting public domain data…", "جاري جمع بيانات النطاق العامة…")))
+            Thread {
+                val response = runCatching { AssafApiClient.analyzeLink(value) }
+                runOnUiThread {
+                    check.isEnabled = true
+                    check.text = tr("Analyze link", "حلّل الرابط")
+                    report.removeAllViews()
+                    if (response.isFailure) {
+                        report.addView(infoCard(tr(
+                            "Could not complete the lookup: ${response.exceptionOrNull()?.message ?: "Unknown error"}. Check the connection and API service.",
+                            "تعذّر إكمال الفحص: ${response.exceptionOrNull()?.message ?: "خطأ غير معروف"}. تأكد من الاتصال وخدمة API."
+                        )))
+                    } else {
+                        val data = response.getOrThrow()
+                        val domain = data.optJSONObject("domain") ?: org.json.JSONObject()
+                        val registration = data.optJSONObject("registration") ?: org.json.JSONObject()
+                        val security = data.optJSONObject("security_review") ?: org.json.JSONObject()
+                        val flags = security.optJSONArray("flags") ?: org.json.JSONArray()
+                        val urls = data.optJSONArray("query_parameters") ?: org.json.JSONArray()
+                        val dns = domain.optJSONArray("public_dns_addresses") ?: org.json.JSONArray()
+                        val nameservers = registration.optJSONArray("nameservers") ?: org.json.JSONArray()
+                        fun addSection(title: String, lines: List<String>) {
+                            val card = LinearLayout(this).apply {
+                                orientation = LinearLayout.VERTICAL
+                                setPadding(dp(14), dp(12), dp(14), dp(12))
+                                background = rounded(panel, 16)
+                            }
+                            card.addView(TextView(this).apply {
+                                text = title; setTextColor(blue); textSize = 16f; typeface = Typeface.DEFAULT_BOLD
+                            })
+                            lines.filter { it.isNotBlank() }.forEach { line ->
+                                card.addView(TextView(this).apply {
+                                    text = line; setTextColor(white); textSize = 13f
+                                    setPadding(0, dp(7), 0, dp(2))
+                                })
+                            }
+                            report.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
+                        }
+                        fun arrValues(array: org.json.JSONArray): List<String> = (0 until array.length()).mapNotNull { i -> array.optString(i).takeIf { it.isNotBlank() && it != "null" } }
+                        addSection(tr("01 • Link identity", "01 • هوية الرابط"), listOf(
+                            "${tr("Submitted", "الرابط المدخل")}: ${data.optString("submitted_url")}",
+                            "${tr("Normalized", "الرابط بعد الترتيب")}: ${data.optString("normalized_url")}",
+                            "${tr("Protocol", "البروتوكول")}: ${data.optString("scheme").uppercase(Locale.ROOT)}",
+                            "${tr("Host", "اسم المضيف")}: ${data.optString("hostname")}",
+                            "${tr("Port", "المنفذ")}: ${data.optInt("port")}",
+                            "${tr("Path", "المسار")}: ${data.optString("path")}",
+                            "${tr("Fragment", "علامة الصفحة")}: ${data.optBoolean("fragment_present")}"
+                        ))
+                        addSection(tr("02 • Domain & DNS", "02 • النطاق وDNS"), listOf(
+                            "${tr("Domain estimate", "النطاق التقريبي")}: ${domain.optString("registrable_domain_estimate")}",
+                            "${tr("Address status", "حالة العنوان")}: ${domain.optString("dns_status")}",
+                            "${tr("Public IP addresses", "عناوين IP العامة")}: ${arrValues(dns).joinToString().ifBlank { tr("No public address returned", "لم يُرجع عنوان عام") }}",
+                            domain.optString("note")
+                        ))
+                        val regEvents = registration.optJSONArray("events") ?: org.json.JSONArray()
+                        val eventLines = (0 until regEvents.length()).map { i ->
+                            val e = regEvents.optJSONObject(i) ?: org.json.JSONObject()
+                            "${e.optString("event")}: ${e.optString("date")}"
+                        }
+                        addSection(tr("03 • Domain registration records", "03 • سجلات تسجيل النطاق"), listOf(
+                            "${tr("Lookup status", "حالة الاستعلام")}: ${registration.optString("status")}",
+                            "${tr("Registered domain", "النطاق المسجل")}: ${registration.optString("domain_name")}",
+                            "${tr("Registry handle", "معرّف السجل")}: ${registration.optString("handle")}",
+                            "${tr("Name servers", "خوادم الأسماء")}: ${nameservers.let { arrValues(it).joinToString().ifBlank { tr("Not available", "غير متاح") } }}",
+                            *eventLines.toTypedArray(),
+                            registration.optString("disclaimer"),
+                            registration.optString("reason")
+                        ))
+                        val flagLines = (0 until flags.length()).map { i ->
+                            val f = flags.optJSONObject(i) ?: org.json.JSONObject()
+                            "• [${f.optString("level")}] ${f.optString("code")}: ${f.optString("detail")}"
+                        }
+                        addSection(tr("04 • Security indicators", "04 • مؤشرات الأمان"), listOf(
+                            "${tr("Assessment", "التقييم")}: ${security.optString("status")}",
+                            "${tr("Confidence", "مستوى الثقة")}: ${security.optString("confidence")}",
+                            *flagLines.toTypedArray(),
+                            security.optString("important")
+                        ))
+                        addSection(tr("05 • URL parameters", "05 • معاملات الرابط"), if (urls.length() == 0) listOf(tr("No query parameters found.", "لا توجد معاملات إضافية في الرابط.")) else (0 until urls.length()).map { i ->
+                            val p = urls.optJSONObject(i) ?: org.json.JSONObject()
+                            "${p.optString("name")} = ${p.optString("value")}"
+                        })
+                        addSection(tr("06 • Data sources & limitations", "06 • مصادر البيانات والحدود"), listOf(
+                            "${tr("Generated at", "وقت إنشاء التقرير")}: ${data.optString("generated_at")}",
+                            "${tr("Sources", "المصادر")}: ${arrValues(data.optJSONArray("data_sources") ?: org.json.JSONArray()).joinToString()}",
+                            tr("The report does not yet check a live phishing/malware reputation feed, inspect page contents, validate the TLS certificate, or follow redirects. A clean preliminary result is not proof of safety.", "التقرير لا يفحص بعد قواعد تصيّد/برمجيات خبيثة مباشرة، ولا يقرأ محتوى الصفحة أو يتحقق من شهادة TLS أو يتتبع التحويلات. النتيجة المبدئية النظيفة لا تثبت أن الموقع آمن.")
+                        ))
+                    }
                 }
-            }
+            }.start()
         }
-        hotspot(tr("Apps", "التطبيقات"), 0.46f, 0.42f, 0.30f, 0.18f, "apps")
-        hotspot(tr("Statistics", "الإحصائيات"), 0.10f, 0.42f, 0.30f, 0.18f, "stats")
-        hotspot(tr("Data connection", "اتصال البيانات"), 0.10f, 0.60f, 0.30f, 0.16f, "connection")
-        hotspot(tr("Schedule", "الجدولة"), 0.46f, 0.60f, 0.30f, 0.16f, "schedule")
-        hotspot(tr("Settings", "الإعدادات"), 0.28f, 0.77f, 0.42f, 0.12f, "settings")
-        setContentView(root)
+    }
+
+    private fun buildWifiScreen() {
+        val root = pageRoot(tr("Wi-Fi Check", "فحص الواي فاي"))
+        val connected = try {
+            val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val network = cm.activeNetwork
+            val caps = network?.let { cm.getNetworkCapabilities(it) }
+            caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true
+        } catch (_: Exception) { false }
+        root.addView(infoCard(tr(
+            if (connected) "Wi-Fi connection detected." else "No active Wi-Fi connection detected.",
+            if (connected) "تم اكتشاف اتصال واي فاي." else "لم يتم اكتشاف اتصال واي فاي نشط."
+        )), wrap())
+        root.addView(infoCard(tr(
+            "ASSAF cannot guarantee a network is safe from connection status alone. Check the router password and use trusted networks.",
+            "لا يستطيع ASSAF ضمان أمان الشبكة من حالة الاتصال وحدها. تأكد من كلمة مرور الراوتر واستخدم الشبكات الموثوقة."
+        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+    }
+
+    private fun buildProfileScreen() {
+        val root = pageRoot(tr("Personal profile", "الملف الشخصي"))
+        root.addView(infoCard(tr("ASSAF User", "مستخدم ASSAF")), wrap())
+        root.addView(infoCard(tr(
+            "Manage your language and protection settings on this device.",
+            "أدر إعدادات اللغة والحماية على هذا الجهاز."
+        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+        root.addView(primaryButton(tr("Settings", "الإعدادات")).apply {
+            setOnClickListener { goTo("settings") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(16) })
+    }
+
+    private fun buildPlusScreen() {
+        val root = pageRoot(tr("ASSAF Plus", "عساف بلس"))
+        root.addView(infoCard(tr(
+            "Premium features and subscriptions are not active yet.",
+            "ميزات الاشتراك والدفع غير مفعّلة حتى الآن."
+        )), wrap())
+        root.addView(infoCard(tr(
+            "No payment will be taken from this screen. Subscription management will be added after the service is implemented.",
+            "لن يتم تحصيل أي دفعة من هذه الشاشة. ستتم إضافة إدارة الاشتراك بعد تنفيذ الخدمة."
+        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+    }
+
+    // Native ASSAF home screen based on the new cyber-security concept; no screenshot background.
+    private fun buildHomeScreen() {
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(navy)
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+        }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(22))
+            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        }
+        scroll.addView(root)
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val logo = ImageView(this).apply {
+            setImageResource(R.drawable.ic_assaf_shield)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "ASSAF"
+        }
+        header.addView(logo, LinearLayout.LayoutParams(dp(54), dp(54)))
+        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
+        brand.addView(TextView(this).apply {
+            text = "ASSAF"; textSize = 27f; typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            setTextColor(white)
+        }, wrap())
+        brand.addView(TextView(this).apply {
+            text = tr("Your Internet. Your Control.", "إنترنتك، تحكّمك.")
+            textSize = 12f; setTextColor(muted)
+        }, wrap())
+        header.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(smallButton().apply {
+            text = "⚙"
+            textSize = 22f
+            contentDescription = tr("Settings", "الإعدادات")
+            setOnClickListener { goTo("settings") }
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        root.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(62)))
+
+        val welcome = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(8, 38, 76), Color.rgb(12, 24, 47), Color.rgb(8, 16, 31))
+            ).apply {
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1), Color.rgb(24, 116, 202))
+            }
+            setPadding(dp(18), dp(22), dp(18), dp(22))
+        }
+        welcome.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ic_assaf_shield)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }, LinearLayout.LayoutParams(dp(78), dp(78)))
+        welcome.addView(TextView(this).apply {
+            text = tr("MR. ASSAF", "MR. ASSAF")
+            textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setTextColor(white); gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, wrap().height).apply { topMargin = dp(8) })
+        welcome.addView(TextView(this).apply {
+            text = tr("Welcome to ASSAF", "مرحباً بك في تطبيق عساف")
+            textSize = 15f; setTextColor(muted); gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(5) })
+        val languageRow = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
+        languageRow.addView(smallButton().apply {
+            text = if (arabic) "عربي  |  English" else "English  |  عربي"
+            setOnClickListener {
+                arabic = !arabic
+                prefs.edit().putBoolean(KEY_ARABIC, arabic).apply()
+                buildUi()
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)).apply { topMargin = dp(14) })
+        welcome.addView(languageRow)
+        root.addView(welcome, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(18)
+        })
+
+        val active = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
+        val statusCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(panel, 15)
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+        }
+        val statusDot = TextView(this).apply {
+            text = if (active) "●" else "○"
+            textSize = 22f; setTextColor(if (active) green else muted)
+        }
+        statusCard.addView(statusDot, LinearLayout.LayoutParams(dp(32), dp(32)))
+        statusCard.addView(TextView(this).apply {
+            text = if (active) tr("Protection is active", "الحماية مفعّلة") else tr("Protection is off", "الحماية غير مفعّلة")
+            textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(white)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        statusCard.addView(smallButton().apply {
+            text = tr("Apps", "التطبيقات")
+            setOnClickListener { goTo("apps") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)))
+        root.addView(statusCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(14)
+        })
+
+        root.addView(TextView(this).apply {
+            text = tr("ASSAF TOOLS", "أدوات عساف")
+            textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(white)
+            gravity = if (arabic) Gravity.RIGHT else Gravity.LEFT
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(22); bottomMargin = dp(10)
+        })
+
+        fun toolTile(iconRes: Int, english: String, arabicLabel: String, screen: String): LinearLayout {
+            val tile = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    intArrayOf(Color.rgb(24, 45, 72), Color.rgb(17, 33, 56))
+                ).apply {
+                    cornerRadius = dp(20).toFloat()
+                    setStroke(dp(1), Color.rgb(42, 78, 117))
+                }
+                contentDescription = tr(english, arabicLabel)
+                setOnClickListener { goTo(screen) }
+                setPadding(dp(8), dp(16), dp(8), dp(16))
+            }
+            tile.addView(ImageView(this).apply {
+                setImageResource(iconRes)
+                contentDescription = tr(english, arabicLabel)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }, LinearLayout.LayoutParams(dp(48), dp(48)))
+            tile.addView(TextView(this).apply {
+                text = tr(english, arabicLabel)
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(white)
+                setTypeface(typeface, Typeface.BOLD)
+                maxLines = 2
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(10)
+            })
+            return tile
+        }
+        val rows = listOf(
+            listOf(toolTile(R.drawable.ic_assaf_shield, "ASSAF Shield", "درع عساف", "shield"), toolTile(R.drawable.ic_assaf_link, "Link Check", "فحص الروابط", "link")),
+            listOf(toolTile(R.drawable.ic_assaf_privacy, "Privacy Report", "تقرير الخصوصية", "privacy"), toolTile(R.drawable.ic_assaf_wifi, "Wi-Fi Check", "فحص الواي فاي", "wifi")),
+            listOf(toolTile(R.drawable.ic_assaf_apps, "Applications", "التطبيقات", "apps"), toolTile(R.drawable.ic_assaf_settings, "Settings", "الإعدادات", "settings"))
+        )
+        rows.forEach { row ->
+            val rowLayout = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+            row.forEachIndexed { index, tile ->
+                rowLayout.addView(tile, LinearLayout.LayoutParams(0, dp(132), 1f).apply {
+                    if (index == 0) marginEnd = dp(8) else marginStart = dp(8)
+                })
+            }
+            root.addView(rowLayout, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(12)
+            })
+        }
+        root.addView(TextView(this).apply {
+            text = tr("Your Internet. Your Control.", "إنترنتك، تحكّمك.")
+            textSize = 12f; setTextColor(muted); gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(4))
+        }, wrap())
+        setContentView(scroll)
     }
 
     // Separate app screen: only the six requested apps appear here.
