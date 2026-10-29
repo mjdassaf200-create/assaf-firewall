@@ -254,6 +254,87 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
     }
 
+    private fun buildShieldScreen() {
+        val root = pageRoot(tr("ASSAF Shield", "درع عساف"))
+        root.addView(infoCard(tr(
+            "Protection status and filtering engine",
+            "حالة الحماية ومحرك التصفية"
+        )), wrap())
+        root.addView(infoCard(tr(
+            "App internet blocking is available in the Applications screen. Ad and malicious-domain blocking needs a separate filtering engine and is not active yet.",
+            "يمكن التحكم بإنترنت التطبيقات من صفحة التطبيقات. حجب الإعلانات والنطاقات الضارة يحتاج محرك تصفية مستقل، وهو غير مفعّل حالياً."
+        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+        root.addView(primaryButton(tr("Open applications", "فتح التطبيقات")).apply {
+            setOnClickListener { goTo("apps") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(16) })
+    }
+
+    private fun buildLinkScreen() {
+        val root = pageRoot(tr("Link Check", "فحص الروابط"))
+        val input = EditText(this).apply {
+            hint = tr("Enter a link to check", "أدخل الرابط لفحصه")
+            setTextColor(white); setHintTextColor(muted); textSize = 16f
+            setSingleLine(true); inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setPadding(dp(14), dp(12), dp(14), dp(12)); background = rounded(panel, 14)
+        }
+        root.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)))
+        val result = infoCard(tr("The check is local and basic; it is not a live threat database.", "الفحص محلي ومبدئي، وليس قاعدة تهديدات مباشرة."))
+        root.addView(result, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+        root.addView(primaryButton(tr("Check link", "فحص الرابط")).apply {
+            setOnClickListener {
+                val value = input.text.toString().trim()
+                result.text = when {
+                    value.isBlank() -> tr("Enter a link first.", "أدخل الرابط أولاً.")
+                    !(value.startsWith("https://") || value.startsWith("http://")) -> tr("This link format looks incomplete. Include http:// or https://.", "صيغة الرابط غير مكتملة. أضف http:// أو https://.")
+                    value.startsWith("http://") -> tr("Warning: this link does not use HTTPS. This is not proof that the site is malicious.", "تحذير: الرابط لا يستخدم HTTPS. هذا لا يعني بالضرورة أن الموقع ضار.")
+                    else -> tr("HTTPS format detected. This basic check cannot confirm that the site is safe.", "تم اكتشاف صيغة HTTPS. هذا الفحص المبدئي لا يؤكد أن الموقع آمن.")
+                }
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(12) })
+    }
+
+    private fun buildWifiScreen() {
+        val root = pageRoot(tr("Wi-Fi Check", "فحص الواي فاي"))
+        val connected = try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val network = cm.activeNetwork
+            val caps = network?.let { cm.getNetworkCapabilities(it) }
+            caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true
+        } catch (_: Exception) { false }
+        root.addView(infoCard(tr(
+            if (connected) "Wi-Fi connection detected." else "No active Wi-Fi connection detected.",
+            if (connected) "تم اكتشاف اتصال واي فاي." else "لم يتم اكتشاف اتصال واي فاي نشط."
+        )), wrap())
+        root.addView(infoCard(tr(
+            "ASSAF cannot guarantee a network is safe from connection status alone. Check the router password and use trusted networks.",
+            "لا يستطيع ASSAF ضمان أمان الشبكة من حالة الاتصال وحدها. تأكد من كلمة مرور الراوتر واستخدم الشبكات الموثوقة."
+        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+    }
+
+    private fun buildProfileScreen() {
+        val root = pageRoot(tr("Personal profile", "الملف الشخصي"))
+        root.addView(infoCard(tr("ASSAF User", "مستخدم ASSAF")), wrap())
+        root.addView(infoCard(tr(
+            "Manage your language and protection settings on this device.",
+            "أدر إعدادات اللغة والحماية على هذا الجهاز."
+        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+        root.addView(primaryButton(tr("Settings", "الإعدادات")).apply {
+            setOnClickListener { goTo("settings") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(16) })
+    }
+
+    private fun buildPlusScreen() {
+        val root = pageRoot(tr("ASSAF Plus", "عساف بلس"))
+        root.addView(infoCard(tr(
+            "Premium features and subscriptions are not active yet.",
+            "ميزات الاشتراك والدفع غير مفعّلة حتى الآن."
+        )), wrap())
+        root.addView(infoCard(tr(
+            "No payment will be taken from this screen. Subscription management will be added after the service is implemented.",
+            "لن يتم تحصيل أي دفعة من هذه الشاشة. ستتم إضافة إدارة الاشتراك بعد تنفيذ الخدمة."
+        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+    }
+
     // Approved artwork remains the background; visible native tool tiles sit in its empty tools panel.
     private fun buildHomeScreen() {
         val root = FrameLayout(this).apply { setBackgroundColor(navy) }
