@@ -254,7 +254,7 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
     }
 
-    // Approved artwork stays unchanged; transparent hotspots open real screens.
+    // Approved artwork remains the background; visible native tool tiles sit in its empty tools panel.
     private fun buildHomeScreen() {
         val root = FrameLayout(this).apply { setBackgroundColor(navy) }
         val artwork = ImageView(this).apply {
@@ -264,26 +264,72 @@ class MainActivity : Activity() {
             isClickable = false
         }
         root.addView(artwork, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        fun hotspot(label: String, x: Float, y: Float, width: Float, height: Float, screen: String) {
-            val v = View(this).apply {
-                contentDescription = label; isClickable = true; isFocusable = true
-                setBackgroundColor(Color.TRANSPARENT); setOnClickListener { goTo(screen) }
-            }
-            root.addView(v, FrameLayout.LayoutParams(1, 1, Gravity.TOP or Gravity.START))
-            root.post {
-                if (root.width > 0 && root.height > 0) {
-                    val lp = v.layoutParams as FrameLayout.LayoutParams
-                    lp.width = (root.width * width).toInt(); lp.height = (root.height * height).toInt()
-                    lp.leftMargin = (root.width * x).toInt(); lp.topMargin = (root.height * y).toInt()
-                    v.layoutParams = lp
-                }
-            }
+
+        val tools = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(8), dp(8), dp(8))
         }
-        hotspot(tr("Apps", "التطبيقات"), 0.46f, 0.42f, 0.30f, 0.18f, "apps")
-        hotspot(tr("Statistics", "الإحصائيات"), 0.10f, 0.42f, 0.30f, 0.18f, "stats")
-        hotspot(tr("Data connection", "اتصال البيانات"), 0.10f, 0.60f, 0.30f, 0.16f, "connection")
-        hotspot(tr("Schedule", "الجدولة"), 0.46f, 0.60f, 0.30f, 0.16f, "schedule")
-        hotspot(tr("Settings", "الإعدادات"), 0.28f, 0.77f, 0.42f, 0.12f, "settings")
+        fun toolTile(icon: String, english: String, arabicLabel: String, screen: String): LinearLayout {
+            val tile = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(18).toFloat()
+                    setColor(panelLight)
+                    setStroke(dp(1), Color.rgb(43, 70, 105))
+                }
+                contentDescription = tr(english, arabicLabel)
+                setOnClickListener { goTo(screen) }
+                setPadding(dp(6), dp(8), dp(6), dp(8))
+            }
+            tile.addView(TextView(this).apply {
+                text = icon
+                textSize = 29f
+                gravity = Gravity.CENTER
+                setTextColor(white)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            tile.addView(TextView(this).apply {
+                text = tr(english, arabicLabel)
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setTextColor(white)
+                setTypeface(typeface, Typeface.BOLD)
+                maxLines = 2
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(5)
+            })
+            return tile
+        }
+        val rows = listOf(
+            listOf(toolTile("🛡️", "ASSAF Shield", "درع عساف", "shield"), toolTile("🔗", "Link Check", "فحص الروابط", "link")),
+            listOf(toolTile("📊", "Privacy Report", "تقرير الخصوصية", "privacy"), toolTile("📶", "Wi-Fi Check", "فحص الواي فاي", "wifi")),
+            listOf(toolTile("📱", "Applications", "التطبيقات", "apps"), toolTile("⚙️", "Settings", "الإعدادات", "settings"))
+        )
+        rows.forEach { row ->
+            val rowLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+            row.forEach { tile ->
+                rowLayout.addView(tile, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+                    if (tile === row.first()) marginEnd = dp(7) else marginStart = dp(7)
+                })
+            }
+            tools.addView(rowLayout, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                bottomMargin = dp(9)
+            })
+        }
+        root.addView(tools, FrameLayout.LayoutParams(
+            (resources.displayMetrics.widthPixels * 0.88f).toInt(),
+            (resources.displayMetrics.heightPixels * 0.40f).toInt(),
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        ).apply {
+            topMargin = (resources.displayMetrics.heightPixels * 0.385f).toInt()
+        })
         setContentView(root)
     }
 
