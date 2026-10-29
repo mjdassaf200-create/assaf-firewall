@@ -49,6 +49,8 @@ object AssafApiClient {
 
     fun checkHealth(): String = request("GET", "/health")
 
+    fun analyzeLink(url: String): JSONObject = JSONObject(request("POST", "/v1/link-check/analyze", body = JSONObject().put("url", url)))
+
     fun pingTelemetry(installId: String, appVersion: String) {
         request("POST", "/v1/telemetry/ping", body = JSONObject()
             .put("install_id", installId)
