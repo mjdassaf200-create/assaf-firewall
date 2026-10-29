@@ -241,6 +241,14 @@ class MainActivity : Activity() {
         }, wrap())
         root.addView(primaryButton(tr("ASSAF cloud account", "حساب ASSAF السحابي")).apply { setOnClickListener { showAccountDialog() } },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(14) })
+        root.addView(smallButton().apply {
+            text = tr("Protection schedule", "جدولة الحماية")
+            setOnClickListener { goTo("schedule") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
+        root.addView(smallButton().apply {
+            text = tr("Connection details", "تفاصيل الاتصال")
+            setOnClickListener { goTo("connection") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
         val active = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
         root.addView(infoCard(tr("Firewall status: " + if (active) "Active" else "Off", "حالة جدار الحماية: " + if (active) "يعمل" else "متوقف")),
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
