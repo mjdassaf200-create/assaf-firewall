@@ -271,26 +271,122 @@ class MainActivity : Activity() {
 
     private fun buildLinkScreen() {
         val root = pageRoot(tr("Link Check", "فحص الروابط"))
+        val intro = infoCard(tr(
+            "Deep preliminary report: domain registration and public DNS details. The site itself is not opened and threat databases are not queried yet.",
+            "تقرير مبدئي مفصّل: بيانات تسجيل النطاق وDNS العام. لن نفتح الموقع نفسه، وقواعد التهديدات المباشرة غير موصولة بعد."
+        ))
+        root.addView(intro, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
         val input = EditText(this).apply {
-            hint = tr("Enter a link to check", "أدخل الرابط لفحصه")
+            hint = tr("Paste a public website URL", "الصق رابط موقع عام")
             setTextColor(white); setHintTextColor(muted); textSize = 16f
             setSingleLine(true); inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
             setPadding(dp(14), dp(12), dp(14), dp(12)); background = rounded(panel, 14)
         }
         root.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)))
-        val result = infoCard(tr("The check is local and basic; it is not a live threat database.", "الفحص محلي ومبدئي، وليس قاعدة تهديدات مباشرة."))
-        root.addView(result, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
-        root.addView(primaryButton(tr("Check link", "فحص الرابط")).apply {
-            setOnClickListener {
-                val value = input.text.toString().trim()
-                result.text = when {
-                    value.isBlank() -> tr("Enter a link first.", "أدخل الرابط أولاً.")
-                    !(value.startsWith("https://") || value.startsWith("http://")) -> tr("This link format looks incomplete. Include http:// or https://.", "صيغة الرابط غير مكتملة. أضف http:// أو https://.")
-                    value.startsWith("http://") -> tr("Warning: this link does not use HTTPS. This is not proof that the site is malicious.", "تحذير: الرابط لا يستخدم HTTPS. هذا لا يعني بالضرورة أن الموقع ضار.")
-                    else -> tr("HTTPS format detected. This basic check cannot confirm that the site is safe.", "تم اكتشاف صيغة HTTPS. هذا الفحص المبدئي لا يؤكد أن الموقع آمن.")
-                }
+        val report = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(report, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+        val check = primaryButton(tr("Analyze link", "حلّل الرابط"))
+        root.addView(check, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(12) })
+        check.setOnClickListener {
+            val value = input.text.toString().trim()
+            if (value.isBlank()) {
+                Toast.makeText(this, tr("Enter a link first", "أدخل الرابط أولاً"), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(12) })
+            check.isEnabled = false
+            check.text = tr("Analyzing…", "جاري التحليل…")
+            report.removeAllViews()
+            report.addView(infoCard(tr("Collecting public domain data…", "جاري جمع بيانات النطاق العامة…")))
+            Thread {
+                val response = runCatching { AssafApiClient.analyzeLink(value) }
+                runOnUiThread {
+                    check.isEnabled = true
+                    check.text = tr("Analyze link", "حلّل الرابط")
+                    report.removeAllViews()
+                    if (response.isFailure) {
+                        report.addView(infoCard(tr(
+                            "Could not complete the lookup: ${response.exceptionOrNull()?.message ?: "Unknown error"}. Check the connection and API service.",
+                            "تعذّر إكمال الفحص: ${response.exceptionOrNull()?.message ?: "خطأ غير معروف"}. تأكد من الاتصال وخدمة API."
+                        )))
+                    } else {
+                        val data = response.getOrThrow()
+                        val domain = data.optJSONObject("domain") ?: org.json.JSONObject()
+                        val registration = data.optJSONObject("registration") ?: org.json.JSONObject()
+                        val security = data.optJSONObject("security_review") ?: org.json.JSONObject()
+                        val flags = security.optJSONArray("flags") ?: org.json.JSONArray()
+                        val urls = data.optJSONArray("query_parameters") ?: org.json.JSONArray()
+                        val dns = domain.optJSONArray("public_dns_addresses") ?: org.json.JSONArray()
+                        val nameservers = registration.optJSONArray("nameservers") ?: org.json.JSONArray()
+                        fun addSection(title: String, lines: List<String>) {
+                            val card = LinearLayout(this).apply {
+                                orientation = LinearLayout.VERTICAL
+                                setPadding(dp(14), dp(12), dp(14), dp(12))
+                                background = rounded(panel, 16)
+                            }
+                            card.addView(TextView(this).apply {
+                                text = title; setTextColor(blue); textSize = 16f; typeface = Typeface.DEFAULT_BOLD
+                            })
+                            lines.filter { it.isNotBlank() }.forEach { line ->
+                                card.addView(TextView(this).apply {
+                                    text = line; setTextColor(white); textSize = 13f
+                                    setPadding(0, dp(7), 0, dp(2))
+                                })
+                            }
+                            report.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
+                        }
+                        fun arrValues(array: org.json.JSONArray): List<String> = (0 until array.length()).mapNotNull { i -> array.optString(i).takeIf { it.isNotBlank() && it != "null" } }
+                        addSection(tr("01 • Link identity", "01 • هوية الرابط"), listOf(
+                            "${tr("Submitted", "الرابط المدخل")}: ${data.optString("submitted_url")}",
+                            "${tr("Normalized", "الرابط بعد الترتيب")}: ${data.optString("normalized_url")}",
+                            "${tr("Protocol", "البروتوكول")}: ${data.optString("scheme").uppercase(Locale.ROOT)}",
+                            "${tr("Host", "اسم المضيف")}: ${data.optString("hostname")}",
+                            "${tr("Port", "المنفذ")}: ${data.optInt("port")}",
+                            "${tr("Path", "المسار")}: ${data.optString("path")}",
+                            "${tr("Fragment", "علامة الصفحة")}: ${data.optBoolean("fragment_present")}"
+                        ))
+                        addSection(tr("02 • Domain & DNS", "02 • النطاق وDNS"), listOf(
+                            "${tr("Domain estimate", "النطاق التقريبي")}: ${domain.optString("registrable_domain_estimate")}",
+                            "${tr("Address status", "حالة العنوان")}: ${domain.optString("dns_status")}",
+                            "${tr("Public IP addresses", "عناوين IP العامة")}: ${arrValues(dns).joinToString().ifBlank { tr("No public address returned", "لم يُرجع عنوان عام") }}",
+                            domain.optString("note")
+                        ))
+                        val regEvents = registration.optJSONArray("events") ?: org.json.JSONArray()
+                        val eventLines = (0 until regEvents.length()).map { i ->
+                            val e = regEvents.optJSONObject(i) ?: org.json.JSONObject()
+                            "${e.optString("event")}: ${e.optString("date")}"
+                        }
+                        addSection(tr("03 • Domain registration records", "03 • سجلات تسجيل النطاق"), listOf(
+                            "${tr("Lookup status", "حالة الاستعلام")}: ${registration.optString("status")}",
+                            "${tr("Registered domain", "النطاق المسجل")}: ${registration.optString("domain_name")}",
+                            "${tr("Registry handle", "معرّف السجل")}: ${registration.optString("handle")}",
+                            "${tr("Name servers", "خوادم الأسماء")}: ${nameservers.let { arrValues(it).joinToString().ifBlank { tr("Not available", "غير متاح") } }}",
+                            *eventLines.toTypedArray(),
+                            registration.optString("disclaimer"),
+                            registration.optString("reason")
+                        ))
+                        val flagLines = (0 until flags.length()).map { i ->
+                            val f = flags.optJSONObject(i) ?: org.json.JSONObject()
+                            "• [${f.optString("level")}] ${f.optString("code")}: ${f.optString("detail")}"
+                        }
+                        addSection(tr("04 • Security indicators", "04 • مؤشرات الأمان"), listOf(
+                            "${tr("Assessment", "التقييم")}: ${security.optString("status")}",
+                            "${tr("Confidence", "مستوى الثقة")}: ${security.optString("confidence")}",
+                            *flagLines.toTypedArray(),
+                            security.optString("important")
+                        ))
+                        addSection(tr("05 • URL parameters", "05 • معاملات الرابط"), if (urls.length() == 0) listOf(tr("No query parameters found.", "لا توجد معاملات إضافية في الرابط.")) else (0 until urls.length()).map { i ->
+                            val p = urls.optJSONObject(i) ?: org.json.JSONObject()
+                            "${p.optString("name")} = ${p.optString("value")}"
+                        })
+                        addSection(tr("06 • Data sources & limitations", "06 • مصادر البيانات والحدود"), listOf(
+                            "${tr("Generated at", "وقت إنشاء التقرير")}: ${data.optString("generated_at")}",
+                            "${tr("Sources", "المصادر")}: ${arrValues(data.optJSONArray("data_sources") ?: org.json.JSONArray()).joinToString()}",
+                            tr("The report does not yet check a live phishing/malware reputation feed, inspect page contents, validate the TLS certificate, or follow redirects. A clean preliminary result is not proof of safety.", "التقرير لا يفحص بعد قواعد تصيّد/برمجيات خبيثة مباشرة، ولا يقرأ محتوى الصفحة أو يتحقق من شهادة TLS أو يتتبع التحويلات. النتيجة المبدئية النظيفة لا تثبت أن الموقع آمن.")
+                        ))
+                    }
+                }
+            }.start()
+        }
     }
 
     private fun buildWifiScreen() {
