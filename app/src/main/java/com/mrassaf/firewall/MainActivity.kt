@@ -540,17 +540,31 @@ class MainActivity : Activity() {
             bottomMargin = dp(14)
         })
 
-        root.addView(primaryButton(tr("Prepare tapper", "تجهيز التكبيس")).apply {
+        root.addView(primaryButton(tr("Enable floating controls", "تفعيل التحكم العائم")).apply {
             setOnClickListener {
-                val durationLabel = durations.firstOrNull { it.first == selectedDuration }?.second ?: tr("30 sec", "30 ثانية")
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle(tr("Your settings are ready", "إعداداتك جاهزة"))
-                    .setMessage(tr(
-                        "Selected speed: $selectedSpeed taps per second. Session: $durationLabel. Automatic tapping is not active yet; Android accessibility permission and the tap-position controls must be added before it can safely tap over TikTok.",
-                        "سرعة التكبيس المختارة: $selectedSpeed ضغطة بالثانية. مدة الجلسة: $durationLabel. الضغط التلقائي لسه مش شغّال؛ لازم نضيف إذن إمكانية الوصول وأدوات تحديد مكان الضغط قبل ما يقدر يكبس داخل تيك توك."
-                    ))
-                    .setPositiveButton(tr("Got it", "تمام"), null)
-                    .show()
+                getSharedPreferences("assaf_tapper", MODE_PRIVATE).edit()
+                    .putInt("speed", selectedSpeed)
+                    .putInt("duration", selectedDuration)
+                    .apply()
+                if (!android.provider.Settings.canDrawOverlays(this@MainActivity)) {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(tr("Allow floating control", "السماح بالزر العائم"))
+                        .setMessage(tr("Allow ASSAF to display its floating start/stop button over TikTok. Then return to ASSAF and tap this button again.", "اسمح لـ ASSAF بعرض زر التشغيل والإيقاف فوق تيك توك، وبعدها ارجع للتطبيق واضغط الزر مرة ثانية."))
+                        .setPositiveButton(tr("Open settings", "فتح الإعدادات")) { _, _ ->
+                            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:$packageName")))
+                        }
+                        .setNegativeButton(tr("Cancel", "إلغاء"), null)
+                        .show()
+                } else {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(tr("Enable tap service", "تفعيل خدمة التكبيس"))
+                        .setMessage(tr("In Accessibility settings, enable ASSAF Tapper. Return to TikTok; the floating button lets you start and stop tapping.", "من إعدادات إمكانية الوصول فعّل خدمة ASSAF Tapper. بعدها افتح تيك توك، واستخدم الزر العائم لبدء التكبيس وإيقافه."))
+                        .setPositiveButton(tr("Accessibility settings", "إعدادات إمكانية الوصول")) { _, _ ->
+                            startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        }
+                        .setNegativeButton(tr("Cancel", "إلغاء"), null)
+                        .show()
+                }
             }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)).apply {
             bottomMargin = dp(12)
