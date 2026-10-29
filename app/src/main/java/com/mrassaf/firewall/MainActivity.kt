@@ -140,6 +140,7 @@ class MainActivity : Activity() {
             "shield" -> buildShieldScreen()
             "link" -> buildLinkScreen()
             "wifi" -> buildWifiScreen()
+            "tiktok" -> buildTikTokScreen()
             "profile" -> buildProfileScreen()
             "plus" -> buildPlusScreen()
             else -> buildHomeScreen()
@@ -389,6 +390,20 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun buildTikTokScreen() {
+        val root = pageRoot(tr("TikTok Tapper", "تكبيس تيك توك"))
+        root.addView(TextView(this).apply {
+            text = tr(
+                "TikTok tapper setup is next. Speed controls and safe start/stop behavior are not enabled yet.",
+                "واجهة التكبيس قيد التجهيز. خيارات السرعة والتشغيل والإيقاف لم تُفعّل بعد."
+            )
+            textSize = 16f
+            setTextColor(white)
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(24), dp(12), dp(24))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
     private fun buildWifiScreen() {
         val root = pageRoot(tr("Wi-Fi Check", "فحص الواي فاي"))
         val connected = try {
@@ -579,7 +594,7 @@ class MainActivity : Activity() {
         }
         val rows = listOf(
             listOf(toolTile(R.drawable.ic_assaf_shield, "ASSAF Shield", "درع عساف", "shield"), toolTile(R.drawable.ic_assaf_link, "Link Check", "فحص الروابط", "link")),
-            listOf(toolTile(R.drawable.ic_assaf_privacy, "Privacy Report", "تقرير الخصوصية", "privacy"), toolTile(R.drawable.ic_assaf_wifi, "Wi-Fi Check", "فحص الواي فاي", "wifi")),
+            listOf(toolTile(R.drawable.ic_assaf_privacy, "Privacy Report", "تقرير الخصوصية", "privacy"), toolTile(R.drawable.ic_assaf_tiktok, "TikTok Tapper", "تكبيس تيك توك", "tiktok")),
             listOf(toolTile(R.drawable.ic_assaf_apps, "Applications", "التطبيقات", "apps"), toolTile(R.drawable.ic_assaf_settings, "Settings", "الإعدادات", "settings"))
         )
         rows.forEach { row ->
