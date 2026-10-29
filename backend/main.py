@@ -380,3 +380,149 @@ def telemetry_ping(body: TelemetryPing, db: Session = Depends(get_db)):
         row.last_seen = now
     db.commit()
     return None
+
+
+# Detailed link intelligence. This endpoint deliberately does not fetch the submitted site,
+# preventing user-controlled URLs from becoming an SSRF/proxy primitive.
+import ipaddress
+import socket
+import urllib.error
+import urllib.parse
+import urllib.request
+
+class LinkCheckRequest(BaseModel):
+    url: str = Field(min_length=4, max_length=2048)
+
+
+def _public_dns_records(hostname: str) -> list[str]:
+    records: set[str] = set()
+    try:
+        for item in socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM):
+            address = item[4][0].split("%", 1)[0]
+            try:
+                parsed = ipaddress.ip_address(address)
+                if parsed.is_global:
+                    records.add(address)
+            except ValueError:
+                continue
+    except (OSError, socket.gaierror):
+        return []
+    return sorted(records)
+
+
+def _rdap_domain(domain: str) -> dict:
+    # The host is fixed to rdap.org; domain is URL-escaped as a path component.
+    request = urllib.request.Request(
+        "https://rdap.org/domain/" + urllib.parse.quote(domain, safe=".-"),
+        headers={"User-Agent": "ASSAF-LinkCheck/1.0", "Accept": "application/rdap+json, application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=4) as response:
+            if response.status != 200:
+                return {"status": "unavailable", "source": "RDAP"}
+            data = json.loads(response.read(350000).decode("utf-8", "replace"))
+        events = []
+        for event in data.get("events", []):
+            action = str(event.get("eventAction", ""))
+            date = str(event.get("eventDate", ""))
+            if action and date:
+                events.append({"event": action, "date": date})
+        registrar = None
+        for entity in data.get("entities", []):
+            if "registrar" in entity.get("roles", []):
+                registrar = entity.get("vcardArray", [None, []])[1]
+                break
+        return {
+            "status": "found",
+            "domain_name": data.get("ldhName") or data.get("unicodeName") or domain,
+            "handle": data.get("handle"),
+            "registrar_vcard": registrar,
+            "events": events,
+            "nameservers": [x.get("ldhName") for x in data.get("nameservers", []) if x.get("ldhName")],
+            "statuses": data.get("status", []),
+            "source": "RDAP (public registration data)",
+            "disclaimer": "Registry data may be privacy-redacted or incomplete; registration date is not the site build date.",
+        }
+    except (OSError, ValueError, urllib.error.URLError, TimeoutError):
+        return {"status": "unavailable", "source": "RDAP", "reason": "No public registration record returned or lookup timed out."}
+
+
+@app.post("/v1/link-check/analyze", tags=["link-check"])
+def analyze_link(body: LinkCheckRequest):
+    raw = body.url.strip()
+    if any(ord(ch) < 32 for ch in raw):
+        raise HTTPException(status_code=422, detail="URL contains invalid control characters")
+    candidate = raw if "://" in raw else "https://" + raw
+    try:
+        parsed = urllib.parse.urlsplit(candidate)
+        hostname = (parsed.hostname or "").rstrip(".").lower()
+        scheme = parsed.scheme.lower()
+        port = parsed.port
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid URL format")
+    if scheme not in {"http", "https"} or not hostname or parsed.username or parsed.password:
+        raise HTTPException(status_code=422, detail="Only public http/https URLs without embedded credentials are supported")
+    try:
+        host_ip = ipaddress.ip_address(hostname)
+        if not host_ip.is_global:
+            raise HTTPException(status_code=422, detail="Private, local, and reserved IP addresses cannot be checked")
+        domain = hostname
+        dns_records = [hostname]
+        host_is_ip = True
+    except ValueError:
+        if "." not in hostname or hostname in {"localhost", "localhost.localdomain"}:
+            raise HTTPException(status_code=422, detail="Enter a public internet domain name")
+        try:
+            domain = hostname.encode("idna").decode("ascii")
+        except UnicodeError:
+            raise HTTPException(status_code=422, detail="Invalid international domain name")
+        dns_records = _public_dns_records(domain)
+        host_is_ip = False
+    labels = domain.split(".")
+    registrable_hint = ".".join(labels[-2:]) if len(labels) >= 2 else domain
+    # Heuristics are transparent indicators, not proof of maliciousness.
+    flags = []
+    if scheme == "http":
+        flags.append({"level": "warning", "code": "no_https", "detail": "The submitted URL uses HTTP, so transport encryption is not indicated."})
+    if "@" in parsed.netloc:
+        flags.append({"level": "warning", "code": "at_symbol", "detail": "An @ character appears in the authority portion; verify the actual hostname carefully."})
+    if hostname.startswith("xn--") or ".xn--" in hostname:
+        flags.append({"level": "review", "code": "idn_punycode", "detail": "The hostname contains an internationalized/punycode label; inspect for lookalike characters."})
+    if len(hostname) > 55:
+        flags.append({"level": "review", "code": "long_hostname", "detail": "The hostname is unusually long; this alone does not indicate malicious activity."})
+    if not dns_records:
+        flags.append({"level": "warning", "code": "dns_unresolved", "detail": "No public DNS address was returned by this server's resolver."})
+    if not flags:
+        flags.append({"level": "info", "code": "no_simple_flags", "detail": "No basic URL-format warning was detected. This is not a clean bill of health."})
+    query_params = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)[:80]
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "submitted_url": raw,
+        "normalized_url": urllib.parse.urlunsplit((scheme, parsed.netloc, parsed.path or "/", parsed.query, "")),
+        "scheme": scheme,
+        "hostname": hostname,
+        "port": port or (443 if scheme == "https" else 80),
+        "path": parsed.path or "/",
+        "query_parameters": [{"name": k, "value": v} for k, v in query_params],
+        "fragment_present": bool(parsed.fragment),
+        "domain": {
+            "hostname": hostname,
+            "registrable_domain_estimate": registrable_hint,
+            "is_ip_address": host_is_ip,
+            "public_dns_addresses": dns_records,
+            "dns_status": "resolved_public_address" if dns_records else "no_public_address_returned",
+            "note": "DNS answers are point-in-time observations and can vary by network/location.",
+        },
+        "registration": _rdap_domain(domain) if not host_is_ip else {"status": "not_applicable", "reason": "The submitted host is an IP address."},
+        "security_review": {
+            "status": "preliminary_only",
+            "flags": flags,
+            "threat_intelligence": "not_checked",
+            "tls_certificate": "not_checked",
+            "redirect_chain": "not_checked",
+            "page_content": "not_fetched",
+            "confidence": "limited",
+            "important": "ASSAF did not open the submitted site or query malware/phishing reputation databases. No warning does not mean safe; HTTPS alone does not mean trustworthy.",
+        },
+        "data_sources": ["Local URL parser", "System DNS resolver", "Public RDAP endpoint (when available)"],
+    }
