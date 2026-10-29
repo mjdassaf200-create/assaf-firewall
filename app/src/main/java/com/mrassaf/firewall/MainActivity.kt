@@ -392,16 +392,174 @@ class MainActivity : Activity() {
 
     private fun buildTikTokScreen() {
         val root = pageRoot(tr("TikTok Tapper", "تكبيس تيك توك"))
-        root.addView(TextView(this).apply {
-            text = tr(
-                "TikTok tapper setup is next. Speed controls and safe start/stop behavior are not enabled yet.",
-                "واجهة التكبيس قيد التجهيز. خيارات السرعة والتشغيل والإيقاف لم تُفعّل بعد."
-            )
-            textSize = 16f
+
+        val hero = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(18), dp(20), dp(18), dp(20))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(22, 42, 70), Color.rgb(12, 24, 43))
+            ).apply {
+                cornerRadius = dp(22).toFloat()
+                setStroke(dp(1), Color.rgb(45, 100, 155))
+            }
+        }
+        hero.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ic_assaf_tiktok)
+            contentDescription = "TikTok"
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }, LinearLayout.LayoutParams(dp(58), dp(58)))
+        hero.addView(TextView(this).apply {
+            text = tr("Tap smarter with ASSAF", "خلّي التكبيس أسهل مع ASSAF")
+            textSize = 19f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(white)
             gravity = Gravity.CENTER
-            setPadding(dp(12), dp(24), dp(12), dp(24))
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            setPadding(0, dp(12), 0, dp(6))
+        }, wrap())
+        hero.addView(TextView(this).apply {
+            text = tr(
+                "Choose your preferred speed and session length. You stay in control.",
+                "اختار سرعة التكبيس ومدة الجلسة، وإنت بتظل متحكّم بكل شيء."
+            )
+            textSize = 13f
+            setTextColor(muted)
+            gravity = Gravity.CENTER
+        }, wrap())
+        root.addView(hero, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(16)
+        })
+
+        root.addView(TextView(this).apply {
+            text = tr("CHOOSE SPEED", "اختار السرعة")
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(muted)
+            setPadding(0, dp(4), 0, dp(8))
+        }, wrap())
+
+        var selectedSpeed = 10
+        var selectedDuration = 30
+        val speedButtons = linkedMapOf<Int, TextView>()
+        val durationButtons = linkedMapOf<Int, TextView>()
+
+        fun optionChip(label: String, selected: Boolean): TextView = TextView(this).apply {
+            text = label
+            textSize = 13f
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(if (selected) Color.WHITE else muted)
+            background = GradientDrawable().apply {
+                setColor(if (selected) blue else panel)
+                cornerRadius = dp(13).toFloat()
+                setStroke(dp(1), if (selected) blue else Color.rgb(45, 65, 91))
+            }
+            setPadding(dp(8), dp(13), dp(8), dp(13))
+            isClickable = true
+            isFocusable = true
+        }
+
+        val speedRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+        }
+        listOf(5, 10, 20, 30).forEach { speed ->
+            val chip = optionChip("$speed " + tr("taps/s", "ضغطة/ث"), speed == selectedSpeed)
+            speedButtons[speed] = chip
+            chip.setOnClickListener {
+                selectedSpeed = speed
+                speedButtons.forEach { (value, view) ->
+                    val chosen = value == selectedSpeed
+                    view.setTextColor(if (chosen) Color.WHITE else muted)
+                    view.background = GradientDrawable().apply {
+                        setColor(if (chosen) blue else panel)
+                        cornerRadius = dp(13).toFloat()
+                        setStroke(dp(1), if (chosen) blue else Color.rgb(45, 65, 91))
+                    }
+                }
+            }
+            speedRow.addView(chip, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+                marginStart = dp(3); marginEnd = dp(3)
+            })
+        }
+        root.addView(speedRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(18)
+        })
+
+        root.addView(TextView(this).apply {
+            text = tr("SESSION LENGTH", "مدة الجلسة")
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(muted)
+            setPadding(0, dp(2), 0, dp(8))
+        }, wrap())
+
+        val durationRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+        }
+        val durations = listOf(10 to tr("10 sec", "10 ثواني"), 30 to tr("30 sec", "30 ثانية"), 60 to tr("1 min", "دقيقة"), 0 to tr("No limit", "مفتوح"))
+        durations.forEach { (seconds, label) ->
+            val chip = optionChip(label, seconds == selectedDuration)
+            durationButtons[seconds] = chip
+            chip.setOnClickListener {
+                selectedDuration = seconds
+                durationButtons.forEach { (value, view) ->
+                    val chosen = value == selectedDuration
+                    view.setTextColor(if (chosen) Color.WHITE else muted)
+                    view.background = GradientDrawable().apply {
+                        setColor(if (chosen) blue else panel)
+                        cornerRadius = dp(13).toFloat()
+                        setStroke(dp(1), if (chosen) blue else Color.rgb(45, 65, 91))
+                    }
+                }
+            }
+            durationRow.addView(chip, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+                marginStart = dp(3); marginEnd = dp(3)
+            })
+        }
+        root.addView(durationRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(16)
+        })
+
+        root.addView(infoCard(tr(
+            "Ready to configure • Speed: 10 taps/second • Duration: 30 seconds",
+            "جاهز للإعداد • السرعة: 10 ضغطات بالثانية • المدة: 30 ثانية"
+        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(14)
+        }.also { params ->
+            // Keep the initial status card visually compact.
+        })
+
+        root.addView(primaryButton(tr("Prepare tapper", "تجهيز التكبيس")).apply {
+            setOnClickListener {
+                val durationLabel = durations.firstOrNull { it.first == selectedDuration }?.second ?: tr("30 sec", "30 ثانية")
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle(tr("Your settings are ready", "إعداداتك جاهزة"))
+                    .setMessage(tr(
+                        "Selected speed: $selectedSpeed taps per second. Session: $durationLabel. Automatic tapping is not active yet; Android accessibility permission and the tap-position controls must be added before it can safely tap over TikTok.",
+                        "سرعة التكبيس المختارة: $selectedSpeed ضغطة بالثانية. مدة الجلسة: $durationLabel. الضغط التلقائي لسه مش شغّال؛ لازم نضيف إذن إمكانية الوصول وأدوات تحديد مكان الضغط قبل ما يقدر يكبس داخل تيك توك."
+                    ))
+                    .setPositiveButton(tr("Got it", "تمام"), null)
+                    .show()
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)).apply {
+            bottomMargin = dp(12)
+        })
+
+        root.addView(TextView(this).apply {
+            text = tr(
+                "ASSAF • Simple, clear, and under your control.",
+                "ASSAF • بسيط وواضح، والتحكّم بإيدك."
+            )
+            textSize = 12f
+            setTextColor(muted)
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(6), dp(8), dp(4))
+        }, wrap())
     }
 
     private fun buildWifiScreen() {
