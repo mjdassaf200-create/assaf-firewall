@@ -1,0 +1,3 @@
+<resources>
+    <string name="assaf_tapper_accessibility_description">ASSAF floating tap controls. When enabled by you, this service sends repeated taps at the center of the screen and provides a floating stop button.</string>
+</resources>
