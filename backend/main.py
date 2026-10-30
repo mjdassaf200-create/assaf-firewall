@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pwdlib import PasswordHash
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, create_engine, select
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, create_engine, select, inspect
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 APP_VERSION = "0.1.0"
@@ -45,6 +45,19 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(512))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    is_banned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    ban_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class SupportMessage(Base):
+    __tablename__ = "support_messages"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    category: Mapped[str] = mapped_column(String(20), default="contact")
+    message: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="new", index=True)
+    admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
 
 class AppSetting(Base):
@@ -79,6 +92,14 @@ class Subscription(Base):
 
 
 Base.metadata.create_all(bind=engine)
+
+# create_all does not alter existing tables; add the ban columns safely for existing installs.
+_user_columns = {column["name"] for column in inspect(engine).get_columns("users")}
+with engine.begin() as _connection:
+    if "is_banned" not in _user_columns:
+        _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN is_banned BOOLEAN NOT NULL DEFAULT FALSE")
+    if "ban_reason" not in _user_columns:
+        _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN ban_reason VARCHAR(500)")
 
 app = FastAPI(
     title="ASSAF API",
@@ -116,7 +137,23 @@ class UserResponse(BaseModel):
     id: str
     email: EmailStr
     created_at: datetime
+    is_banned: bool = False
+    ban_reason: str | None = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class SupportMessageInput(BaseModel):
+    message: str = Field(min_length=5, max_length=4000)
+
+
+class BanRequest(BaseModel):
+    banned: bool
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class SupportDecision(BaseModel):
+    status: str = Field(pattern=r"^(accepted|rejected|answered)$")
+    admin_note: str | None = Field(default=None, max_length=2000)
 
 
 class SettingInput(BaseModel):
@@ -187,6 +224,26 @@ def current_user(
     return user
 
 
+def active_user(user: User = Depends(current_user)) -> User:
+    if user.is_banned:
+        raise HTTPException(status_code=403, detail={"code": "ACCOUNT_BANNED", "message": "This account is banned. Contact support or submit an appeal."})
+    return user
+
+
+def optional_user(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(get_db)) -> User | None:
+    if credentials is None:
+        return None
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
+        user_id = payload.get("sub")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    user = db.get(User, user_id) if user_id else None
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
 @app.get("/", tags=["system"])
 def root():
     return {"service": "ASSAF API", "version": APP_VERSION, "status": "ok", "docs": "/docs"}
@@ -230,13 +287,36 @@ def me(user: User = Depends(current_user)):
     return user
 
 
+@app.post("/v1/support/messages", status_code=201, tags=["support"])
+def create_support_message(body: SupportMessageInput, user: User | None = Depends(optional_user), db: Session = Depends(get_db)):
+    row = SupportMessage(user_id=user.id if user else None, category="contact", message=body.message.strip())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "status": row.status, "created_at": row.created_at.isoformat()}
+
+
+@app.post("/v1/appeals", status_code=201, tags=["support"])
+def submit_appeal(body: SupportMessageInput, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not user.is_banned:
+        raise HTTPException(status_code=409, detail="Appeals are only available for banned accounts")
+    pending = db.scalar(select(SupportMessage).where(SupportMessage.user_id == user.id, SupportMessage.category == "appeal", SupportMessage.status == "pending"))
+    if pending:
+        raise HTTPException(status_code=409, detail="You already have a pending appeal")
+    row = SupportMessage(user_id=user.id, category="appeal", message=body.message.strip(), status="pending")
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "status": row.status, "created_at": row.created_at.isoformat()}
+
+
 @app.get("/v1/settings", response_model=list[SettingResponse], tags=["settings"])
-def list_settings(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def list_settings(user: User = Depends(active_user), db: Session = Depends(get_db)):
     return list(db.scalars(select(AppSetting).where(AppSetting.user_id == user.id).order_by(AppSetting.package_name)))
 
 
 @app.put("/v1/settings", response_model=SettingResponse, tags=["settings"])
-def save_setting(body: SettingInput, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def save_setting(body: SettingInput, user: User = Depends(active_user), db: Session = Depends(get_db)):
     setting = db.get(AppSetting, (user.id, body.package_name))
     if setting is None:
         setting = AppSetting(user_id=user.id, package_name=body.package_name, blocked=body.blocked)
@@ -250,13 +330,13 @@ def save_setting(body: SettingInput, user: User = Depends(current_user), db: Ses
 
 
 @app.get("/v1/schedules", response_model=list[ScheduleResponse], tags=["schedules"])
-def list_schedules(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def list_schedules(user: User = Depends(active_user), db: Session = Depends(get_db)):
     rows = db.scalars(select(Schedule).where(Schedule.user_id == user.id).order_by(Schedule.created_at.desc()))
     return [{**{k: getattr(row, k) for k in ("id", "package_name", "start_time", "end_time", "enabled", "timezone_name", "created_at")}, "days": row.days.split(",")} for row in rows]
 
 
 @app.post("/v1/schedules", response_model=ScheduleResponse, status_code=201, tags=["schedules"])
-def create_schedule(body: ScheduleInput, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_schedule(body: ScheduleInput, user: User = Depends(active_user), db: Session = Depends(get_db)):
     valid_days = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
     days = sorted(set(body.days), key=lambda d: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].index(d)) if all(d in valid_days for d in body.days) else None
     if days is None or not days:
@@ -269,7 +349,7 @@ def create_schedule(body: ScheduleInput, user: User = Depends(current_user), db:
 
 
 @app.delete("/v1/schedules/{schedule_id}", status_code=204, tags=["schedules"])
-def delete_schedule(schedule_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_schedule(schedule_id: str, user: User = Depends(active_user), db: Session = Depends(get_db)):
     row = db.scalar(select(Schedule).where(Schedule.id == schedule_id, Schedule.user_id == user.id))
     if row is None:
         raise HTTPException(status_code=404, detail="Schedule not found")
@@ -279,7 +359,7 @@ def delete_schedule(schedule_id: str, user: User = Depends(current_user), db: Se
 
 
 @app.get("/v1/subscription", response_model=SubscriptionResponse, tags=["subscription"])
-def subscription(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def subscription(user: User = Depends(active_user), db: Session = Depends(get_db)):
     row = db.get(Subscription, user.id)
     if row is None:
         row = Subscription(user_id=user.id, plan="free", status="active", provider="none")
@@ -329,6 +409,49 @@ def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bea
     if payload.get("role") != "owner" or not str(payload.get("sub", "")).startswith("owner:"):
         raise HTTPException(status_code=403, detail="Owner access only")
     return payload
+
+@app.get("/v1/admin/users", tags=["owner"])
+def owner_users(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    rows = db.scalars(select(User).order_by(User.created_at.desc()).limit(500))
+    return [{"id": row.id, "email": row.email, "created_at": row.created_at.isoformat(), "is_banned": row.is_banned, "ban_reason": row.ban_reason} for row in rows]
+
+
+@app.patch("/v1/admin/users/{user_id}/ban", tags=["owner"])
+def owner_set_ban(user_id: str, body: BanRequest, _owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_banned = body.banned
+    user.ban_reason = ((body.reason or "").strip()[:500] or None) if body.banned else None
+    db.commit()
+    return {"id": user.id, "email": user.email, "is_banned": user.is_banned, "ban_reason": user.ban_reason}
+
+
+@app.get("/v1/admin/support", tags=["owner"])
+def owner_support(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    rows = db.scalars(select(SupportMessage).order_by(SupportMessage.created_at.desc()).limit(300))
+    result = []
+    for row in rows:
+        user = db.get(User, row.user_id) if row.user_id else None
+        result.append({"id": row.id, "user_id": row.user_id, "email": user.email if user else None, "category": row.category, "message": row.message, "status": row.status, "admin_note": row.admin_note, "created_at": row.created_at.isoformat()})
+    return result
+
+
+@app.patch("/v1/admin/support/{message_id}", tags=["owner"])
+def owner_decide_support(message_id: str, body: SupportDecision, _owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    row = db.get(SupportMessage, message_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Support message not found")
+    row.status = body.status
+    row.admin_note = (body.admin_note or "").strip() or None
+    if row.category == "appeal" and body.status == "accepted" and row.user_id:
+        user = db.get(User, row.user_id)
+        if user:
+            user.is_banned = False
+            user.ban_reason = None
+    db.commit()
+    return {"id": row.id, "status": row.status, "account_unbanned": row.category == "appeal" and body.status == "accepted"}
+
 
 @app.post("/v1/admin/login", tags=["owner"])
 def owner_login(body: OwnerLoginRequest):
@@ -489,7 +612,9 @@ def _rdap_domain(domain: str) -> dict:
 
 
 @app.post("/v1/link-check/analyze", tags=["link-check"])
-def analyze_link(body: LinkCheckRequest):
+def analyze_link(body: LinkCheckRequest, user: User | None = Depends(optional_user)):
+    if user is not None and user.is_banned:
+        raise HTTPException(status_code=403, detail={"code": "ACCOUNT_BANNED", "message": "This account is banned. Contact support or submit an appeal."})
     raw = body.url.strip()
     if any(ord(ch) < 32 for ch in raw):
         raise HTTPException(status_code=422, detail="URL contains invalid control characters")
