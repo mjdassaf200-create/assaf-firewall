@@ -550,7 +550,7 @@ class MainActivity : Activity() {
                 if (!android.provider.Settings.canDrawOverlays(this@MainActivity)) {
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle(tr("Allow floating control", "السماح بالزر العائم"))
-                        .setMessage(tr("Allow ASSAF to display its floating start/stop button over TikTok. Then return to ASSAF and tap this button again.", "اسمح لـ ASSAF بعرض زر التشغيل والإيقاف فوق تيك توك، وبعدها ارجع للتطبيق واضغط الزر مرة ثانية."))
+                        .setMessage(tr("Allow ASSAF to display the movable blue A tap marker and the single start/stop button over TikTok. Then return to ASSAF and tap this button again.", "اسمح لـ ASSAF بعرض علامة A الزرقاء القابلة للتحريك وزر تشغيل/إيقاف واحد فوق تيك توك، وبعدها ارجع للتطبيق واضغط هذا الزر مرة ثانية."))
                         .setPositiveButton(tr("Open settings", "فتح الإعدادات")) { _, _ ->
                             startActivity(Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:$packageName")))
                         }
@@ -559,7 +559,7 @@ class MainActivity : Activity() {
                 } else {
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle(tr("Enable tap service", "تفعيل خدمة التكبيس"))
-                        .setMessage(tr("In Accessibility settings, enable ASSAF Tapper. Return to TikTok; the floating button lets you start and stop tapping.", "من إعدادات إمكانية الوصول فعّل خدمة ASSAF Tapper. بعدها افتح تيك توك، واستخدم الزر العائم لبدء التكبيس وإيقافه."))
+                        .setMessage(tr("In Accessibility settings, enable ASSAF Tapper. Return to TikTok, drag the blue A to the desired tap position, then use the floating button to start or stop.", "من إعدادات إمكانية الوصول فعّل خدمة ASSAF Tapper. بعدها افتح تيك توك، واسحب حرف A الأزرق إلى مكان الضغط المطلوب، واستخدم الزر العائم الواحد لبدء التكبيس أو إيقافه."))
                         .setPositiveButton(tr("Accessibility settings", "إعدادات إمكانية الوصول")) { _, _ ->
                             startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         }
