@@ -304,6 +304,7 @@ class InstallRecord(Base):
     app_version: Mapped[str] = mapped_column(String(40), default="unknown")
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    ip_address: Mapped[str] = mapped_column(String(64), default="unknown")
 
 
 class DeviceBan(Base):
@@ -332,6 +333,13 @@ class ContactMessage(Base):
 
 
 Base.metadata.create_all(bind=engine)
+
+# Lightweight additive migration for databases created by earlier ASSAF versions.
+from sqlalchemy import inspect, text
+with engine.begin() as connection:
+    existing_columns = {column["name"] for column in inspect(engine).get_columns("install_records")}
+    if "ip_address" not in existing_columns:
+        connection.execute(text("ALTER TABLE install_records ADD COLUMN ip_address VARCHAR(64) NOT NULL DEFAULT 'unknown'"))
 
 class ContactMessageInput(BaseModel):
     name: str = Field(min_length=1, max_length=80)
@@ -392,7 +400,7 @@ def owner_overview(_owner: dict = Depends(current_owner), db: Session = Depends(
             "new_accounts_7d": new_users_7d,
         },
         "latest_activity": [
-            {"app_version": row.app_version, "last_seen": row.last_seen.isoformat()}
+            {"install_id": row.install_id, "app_version": row.app_version, "last_seen": row.last_seen.isoformat(), "ip_address": row.ip_address, "banned": bool((db.get(DeviceBan, row.install_id) and db.get(DeviceBan, row.install_id).active))}
             for row in latest
         ],
         "notes": {
@@ -535,15 +543,16 @@ def owner_contact_messages(_owner: dict = Depends(current_owner), db: Session = 
 
 
 @app.post("/v1/telemetry/ping", status_code=204, tags=["telemetry"])
-def telemetry_ping(body: TelemetryPing, db: Session = Depends(get_db)):
+def telemetry_ping(body: TelemetryPing, request: Request, db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
     row = db.get(InstallRecord, body.install_id)
     if row is None:
-        row = InstallRecord(install_id=body.install_id, app_version=body.app_version, first_seen=now, last_seen=now)
+        row = InstallRecord(install_id=body.install_id, app_version=body.app_version, first_seen=now, last_seen=now, ip_address=request_ip(request))
         db.add(row)
     else:
         row.app_version = body.app_version
         row.last_seen = now
+        row.ip_address = request_ip(request)
     db.commit()
     return None
 
