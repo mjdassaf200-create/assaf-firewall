@@ -425,7 +425,7 @@ def request_ip(request) -> str:
 @app.middleware("http")
 async def enforce_device_bans(request, call_next):
     path = request.url.path
-    allowed = (path in {"/", "/health", "/v1/access/status", "/v1/appeals", "/v1/telemetry/ping"}
+    allowed = (path in {"/", "/health", "/v1/access/status", "/v1/appeals", "/v1/contact/messages", "/v1/telemetry/ping"}
                or path.startswith("/v1/admin/"))
     install_id = request.headers.get("x-assaf-install-id", "").strip()
     if path.startswith("/v1/") and not allowed and install_id:
@@ -525,7 +525,7 @@ def review_appeal(appeal_id: str, body: BanActionInput, decision: str, _owner: d
     return {"id": row.id, "status": row.status, "device_unblocked": decision == "accept"}
 
 @app.post("/v1/contact/messages", status_code=201, tags=["contact"])
-def create_contact_message(body: ContactMessageInput, request, db: Session = Depends(get_db)):
+def create_contact_message(body: ContactMessageInput, request: Request, db: Session = Depends(get_db)):
     name = body.name.strip()
     message = body.message.strip()
     if not name:
