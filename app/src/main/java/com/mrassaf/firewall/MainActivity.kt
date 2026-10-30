@@ -155,7 +155,7 @@ class MainActivity : Activity() {
                     } else if (wasBanned) {
                         currentScreen = "home"
                     }
-                    if (wasBanned != accountBanned || accountBanned) buildUi()
+                    if (wasBanned != accountBanned) buildUi()
                 }
             }
         }.start()
