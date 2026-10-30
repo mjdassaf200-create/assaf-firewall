@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Generator
@@ -304,6 +305,24 @@ class InstallRecord(Base):
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
+
+class DeviceBan(Base):
+    __tablename__ = "device_bans"
+    install_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    reason: Mapped[str] = mapped_column(String(500), default="")
+    banned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+class Appeal(Base):
+    __tablename__ = "ban_appeals"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    install_id: Mapped[str] = mapped_column(String(80), index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    ip_address: Mapped[str] = mapped_column(String(64), default="unknown")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
 class ContactMessage(Base):
     __tablename__ = "contact_messages"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -382,8 +401,115 @@ def owner_overview(_owner: dict = Depends(current_owner), db: Session = Depends(
         },
     }
 
+
+class AppealInput(BaseModel):
+    install_id: str = Field(min_length=12, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    message: str = Field(min_length=10, max_length=2000)
+
+class BanActionInput(BaseModel):
+    reason: str = Field(default="", max_length=500)
+
+def request_ip(request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    value = forwarded or (request.client.host if request.client else "unknown")
+    return value[:64]
+
+@app.middleware("http")
+async def enforce_device_bans(request, call_next):
+    path = request.url.path
+    allowed = (path in {"/", "/health", "/v1/access/status", "/v1/appeals"}
+               or path.startswith("/v1/admin/")
+               or path in {"/v1/auth/login", "/v1/auth/register", "/v1/telemetry/ping"})
+    install_id = request.headers.get("x-assaf-install-id", "").strip()
+    if path.startswith("/v1/") and not allowed and install_id:
+        with SessionLocal() as db:
+            ban = db.get(DeviceBan, install_id)
+            if ban and ban.active:
+                from starlette.responses import JSONResponse
+                return JSONResponse(status_code=403, content={"detail": "ASSAF_ACCESS_RESTRICTED", "message": "Your access is restricted. You may submit an appeal."})
+    return await call_next(request)
+
+@app.get("/v1/access/status", tags=["access"])
+def access_status(request):
+    install_id = request.headers.get("x-assaf-install-id", "").strip()
+    if not install_id:
+        raise HTTPException(status_code=400, detail="Installation ID is required")
+    with SessionLocal() as db:
+        ban = db.get(DeviceBan, install_id)
+        latest = db.scalar(select(Appeal).where(Appeal.install_id == install_id).order_by(Appeal.created_at.desc()))
+        return {"blocked": bool(ban and ban.active),
+                "ban_reason": ban.reason if ban and ban.active else "",
+                "appeal_status": latest.status if latest else None}
+
+@app.post("/v1/appeals", status_code=201, tags=["appeals"])
+def submit_appeal(body: AppealInput, request, db: Session = Depends(get_db)):
+    header_id = request.headers.get("x-assaf-install-id", "").strip()
+    if not header_id or header_id != body.install_id:
+        raise HTTPException(status_code=400, detail="Installation ID mismatch")
+    ban = db.get(DeviceBan, body.install_id)
+    if not ban or not ban.active:
+        raise HTTPException(status_code=409, detail="This installation is not currently blocked")
+    now = datetime.now(timezone.utc)
+    recent = db.scalar(select(Appeal).where(Appeal.install_id == body.install_id, Appeal.created_at >= now - timedelta(hours=24)).order_by(Appeal.created_at.desc()))
+    if recent:
+        raise HTTPException(status_code=429, detail="An appeal was already submitted in the last 24 hours")
+    row = Appeal(install_id=body.install_id, message=body.message.strip(), ip_address=request_ip(request))
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "status": row.status, "created_at": row.created_at.isoformat()}
+
+@app.get("/v1/admin/appeals", tags=["owner"])
+def owner_appeals(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    rows = db.query(Appeal).order_by(Appeal.created_at.desc()).limit(300).all()
+    return {"appeals": [{"id": x.id, "install_id": x.install_id, "message": x.message, "status": x.status, "ip_address": x.ip_address, "created_at": x.created_at.isoformat()} for x in rows]}
+
+@app.post("/v1/admin/devices/{install_id}/ban", tags=["owner"])
+def ban_device(install_id: str, body: BanActionInput, _owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{12,80}", install_id):
+        raise HTTPException(status_code=422, detail="Invalid installation ID")
+    row = db.get(DeviceBan, install_id)
+    if row is None:
+        row = DeviceBan(install_id=install_id, reason=body.reason.strip(), active=True)
+        db.add(row)
+    else:
+        row.reason = body.reason.strip()
+        row.active = True
+        row.banned_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"install_id": install_id, "active": True}
+
+@app.post("/v1/admin/devices/{install_id}/unban", tags=["owner"])
+def unban_device(install_id: str, _owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    row = db.get(DeviceBan, install_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Device ban not found")
+    row.active = False
+    db.commit()
+    return {"install_id": install_id, "active": False}
+
+@app.post("/v1/admin/appeals/{appeal_id}/review", tags=["owner"])
+def review_appeal(appeal_id: str, body: BanActionInput, decision: str, _owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    if decision not in {"accept", "reject"}:
+        raise HTTPException(status_code=422, detail="Decision must be accept or reject")
+    row = db.get(Appeal, appeal_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Appeal not found")
+    if row.status != "pending":
+        raise HTTPException(status_code=409, detail="Appeal has already been reviewed")
+    ban = db.get(DeviceBan, row.install_id)
+    if decision == "accept":
+        if ban:
+            ban.active = False
+        row.status = "accepted"
+    else:
+        row.status = "rejected"
+    row.reviewed_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"id": row.id, "status": row.status, "device_unblocked": decision == "accept"}
+
 @app.post("/v1/contact/messages", status_code=201, tags=["contact"])
-def create_contact_message(body: ContactMessageInput, db: Session = Depends(get_db)):
+def create_contact_message(body: ContactMessageInput, request, db: Session = Depends(get_db)):
     name = body.name.strip()
     message = body.message.strip()
     if not name:
