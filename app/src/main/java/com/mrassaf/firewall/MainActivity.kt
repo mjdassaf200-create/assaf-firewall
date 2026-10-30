@@ -42,6 +42,9 @@ class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences(FirewallVpnService.PREFS, MODE_PRIVATE) }
     private var pendingStart = false
     private var currentScreen = "home"
+    private var accountBanned = false
+    private var banReason = ""
+    private var banCheckRunning = false
     private var arabic = true
     private var startHour = 22
     private var startMinute = 0
@@ -113,6 +116,35 @@ class MainActivity : Activity() {
         super.onResume()
         telemetryHandler.removeCallbacks(telemetryTask)
         if (telemetryPrefs.getBoolean("enabled", false)) telemetryHandler.post(telemetryTask)
+        refreshBanStatus()
+    }
+
+    private fun refreshBanStatus() {
+        val token = prefs.getString(KEY_API_TOKEN, null) ?: return
+        if (banCheckRunning) return
+        banCheckRunning = true
+        Thread {
+            val result = runCatching { AssafApiClient.getMe(token) }
+            runOnUiThread {
+                banCheckRunning = false
+                result.onSuccess { profile ->
+                    val wasBanned = accountBanned
+                    accountBanned = profile.optBoolean("is_banned", false)
+                    banReason = profile.optString("ban_reason", "")
+                    if (accountBanned) {
+                        if (!wasBanned || currentScreen !in setOf("banned", "contact", "appeal")) {
+                            currentScreen = "banned"
+                        }
+                        prefs.edit().putBoolean(KEY_SCHEDULE_ENABLED, false).apply()
+                        ScheduleReceiver.reschedule(this)
+                        startService(Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
+                    } else if (wasBanned) {
+                        currentScreen = "home"
+                    }
+                    if (wasBanned != accountBanned || accountBanned) buildUi()
+                }
+            }
+        }.start()
     }
 
     override fun onPause() {
@@ -131,7 +163,11 @@ class MainActivity : Activity() {
     }
 
     private fun buildUi() {
+        if (accountBanned && currentScreen !in setOf("banned", "contact", "appeal")) currentScreen = "banned"
         when (currentScreen) {
+            "banned" -> buildBannedScreen()
+            "contact" -> buildContactScreen()
+            "appeal" -> buildAppealScreen()
             "apps" -> { buildAppsScreen(); loadApps() }
             "stats", "privacy" -> buildStatsScreen()
             "connection" -> buildConnectionScreen()
@@ -146,7 +182,10 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun goTo(screen: String) { currentScreen = screen; buildUi() }
+    private fun goTo(screen: String) {
+        currentScreen = if (accountBanned && screen !in setOf("banned", "contact", "appeal")) "banned" else screen
+        buildUi()
+    }
 
     private fun pageRoot(title: String): LinearLayout {
         val scroll = ScrollView(this).apply { setFillViewport(true); setBackgroundColor(navy); isVerticalScrollBarEnabled = false }
@@ -158,8 +197,8 @@ class MainActivity : Activity() {
         }
         scroll.addView(root)
         root.addView(smallButton().apply {
-            text = tr("← Back to home", "← الرجوع للرئيسية")
-            setOnClickListener { goTo("home") }
+            text = if (accountBanned) tr("← Back", "← رجوع") else tr("← Back to home", "← الرجوع للرئيسية")
+            setOnClickListener { goTo(if (accountBanned) "banned" else "home") }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)))
         root.addView(TextView(this).apply {
             text = title; textSize = 22f; typeface = Typeface.DEFAULT_BOLD
@@ -299,7 +338,7 @@ class MainActivity : Activity() {
             report.removeAllViews()
             report.addView(infoCard(tr("Checking the link indicators…", "جاري فحص مؤشرات الرابط…")))
             Thread {
-                val response = runCatching { AssafApiClient.analyzeLink(value) }
+                val response = runCatching { AssafApiClient.analyzeLink(value, prefs.getString(KEY_API_TOKEN, null)) }
                 runOnUiThread {
                     check.isEnabled = true
                     check.text = tr("Analyze link", "افحص الرابط")
@@ -461,6 +500,112 @@ class MainActivity : Activity() {
                 }
             }.start()
         }
+    }
+
+    private fun buildBannedScreen() {
+        val root = pageRoot(tr("Account access restricted", "تم تقييد الحساب"))
+        root.addView(infoCard(tr(
+            "This account is currently banned. All ASSAF services are disabled except Contact Us and submitting an appeal.",
+            "هذا الحساب محظور حاليًا. تم إيقاف خدمات ASSAF باستثناء التواصل معنا وتقديم الطعن."
+        )), wrap())
+        if (banReason.isNotBlank()) {
+            root.addView(infoCard(tr("Reason: $banReason", "سبب الحظر: $banReason")),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+        }
+        root.addView(primaryButton(tr("Contact Us", "تواصل معنا")).apply {
+            setOnClickListener { goTo("contact") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(18) })
+        root.addView(TextView(this).apply {
+            text = tr("You can contact the ASSAF team and submit an appeal for review.", "يمكنك التواصل مع فريق ASSAF وتقديم طعن لمراجعته.")
+            textSize = 13f; setTextColor(muted); gravity = Gravity.CENTER
+            setPadding(0, dp(12), 0, 0)
+        }, wrap())
+    }
+
+    private fun buildContactScreen() {
+        val root = pageRoot(tr("Contact Us", "تواصل معنا"))
+        root.addView(infoCard(tr("Send a message to the ASSAF administration.", "أرسل رسالة إلى إدارة ASSAF.")), wrap())
+        val message = EditText(this).apply {
+            hint = tr("Write your message here…", "اكتب رسالتك هنا…")
+            setTextColor(white); setHintTextColor(muted); textSize = 15f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 5; gravity = Gravity.TOP or Gravity.START
+            setPadding(dp(14), dp(12), dp(14), dp(12)); background = rounded(panel, 14)
+        }
+        root.addView(message, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(140)).apply { topMargin = dp(14) })
+        val send = primaryButton(tr("Send message", "إرسال الرسالة"))
+        root.addView(send, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(12) })
+        send.setOnClickListener {
+            val value = message.text.toString().trim()
+            if (value.length < 5) {
+                message.error = tr("Write at least 5 characters", "اكتب 5 أحرف على الأقل")
+                return@setOnClickListener
+            }
+            send.isEnabled = false
+            Thread {
+                val result = runCatching { AssafApiClient.submitContact(value, prefs.getString(KEY_API_TOKEN, null)) }
+                runOnUiThread {
+                    send.isEnabled = true
+                    result.onSuccess {
+                        message.text.clear()
+                        Toast.makeText(this, tr("Message sent to ASSAF support", "تم إرسال رسالتك إلى دعم ASSAF"), Toast.LENGTH_LONG).show()
+                    }.onFailure {
+                        Toast.makeText(this, it.message ?: tr("Could not send message", "تعذّر إرسال الرسالة"), Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.start()
+        }
+        root.addView(smallButton().apply {
+            text = tr("Submit an appeal against the ban", "تقديم طعن على الحظر")
+            setOnClickListener { goTo("appeal") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
+    }
+
+    private fun buildAppealScreen() {
+        val root = pageRoot(tr("Appeal the ban", "تقديم طعن على الحظر"))
+        root.addView(infoCard(tr(
+            "Explain why you believe the ban should be reviewed. The administration will review your appeal.",
+            "اشرح لماذا تعتقد أن الحظر يحتاج إلى مراجعة. ستقوم الإدارة بمراجعة الطعن."
+        )), wrap())
+        val message = EditText(this).apply {
+            hint = tr("Write the reasons for your appeal…", "اكتب أسباب الطعن هنا…")
+            setTextColor(white); setHintTextColor(muted); textSize = 15f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 6; gravity = Gravity.TOP or Gravity.START
+            setPadding(dp(14), dp(12), dp(14), dp(12)); background = rounded(panel, 14)
+        }
+        root.addView(message, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(160)).apply { topMargin = dp(14) })
+        val send = primaryButton(tr("Send appeal", "إرسال الطعن"))
+        root.addView(send, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(12) })
+        send.setOnClickListener {
+            val value = message.text.toString().trim()
+            if (value.length < 5) {
+                message.error = tr("Write at least 5 characters", "اكتب 5 أحرف على الأقل")
+                return@setOnClickListener
+            }
+            val token = prefs.getString(KEY_API_TOKEN, null)
+            if (token.isNullOrBlank()) {
+                Toast.makeText(this, tr("Sign in to submit an appeal", "سجّل الدخول لتقديم الطعن"), Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            send.isEnabled = false
+            Thread {
+                val result = runCatching { AssafApiClient.submitAppeal(token, value) }
+                runOnUiThread {
+                    send.isEnabled = true
+                    result.onSuccess {
+                        message.text.clear()
+                        Toast.makeText(this, tr("Appeal submitted for review", "تم إرسال الطعن للمراجعة"), Toast.LENGTH_LONG).show()
+                    }.onFailure {
+                        Toast.makeText(this, it.message ?: tr("Could not submit appeal", "تعذّر إرسال الطعن"), Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.start()
+        }
+        root.addView(smallButton().apply {
+            text = tr("Contact Us", "تواصل معنا")
+            setOnClickListener { goTo("contact") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
     }
 
     private fun buildWifiScreen() {
@@ -814,6 +959,7 @@ class MainActivity : Activity() {
                         dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
                         result.onSuccess { token ->
                             prefs.edit().putString(KEY_API_TOKEN, token).putString(KEY_ACCOUNT_EMAIL, email).apply()
+                            refreshBanStatus()
                             cloudStatusText.text = tr("Signed in • Cloud sync ready", "تم تسجيل الدخول • المزامنة السحابية جاهزة")
                             Toast.makeText(this, tr("ASSAF account connected", "تم ربط حساب ASSAF"), Toast.LENGTH_LONG).show()
                             dialog.dismiss()
