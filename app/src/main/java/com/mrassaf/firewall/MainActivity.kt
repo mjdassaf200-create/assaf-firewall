@@ -55,7 +55,7 @@ class MainActivity : Activity() {
     private val telemetryPrefs by lazy { getSharedPreferences("assaf_telemetry", MODE_PRIVATE) }
     private val telemetryTask = object : Runnable {
         override fun run() {
-            if (telemetryPrefs.getBoolean("enabled", false)) {
+            if (telemetryPrefs.getBoolean("enabled", false) && !accountBanned) {
                 Thread {
                     runCatching {
                         val installId = telemetryPrefs.getString("install_id", null)
@@ -69,6 +69,15 @@ class MainActivity : Activity() {
                     }
                 }.start()
                 telemetryHandler.postDelayed(this, 2 * 60 * 1000L)
+            }
+        }
+    }
+
+    private val banCheckTask = object : Runnable {
+        override fun run() {
+            refreshBanStatus()
+            if (prefs.getString(KEY_API_TOKEN, null) != null) {
+                telemetryHandler.postDelayed(this, 60 * 1000L)
             }
         }
     }
@@ -115,8 +124,11 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         telemetryHandler.removeCallbacks(telemetryTask)
-        if (telemetryPrefs.getBoolean("enabled", false)) telemetryHandler.post(telemetryTask)
-        refreshBanStatus()
+        if (telemetryPrefs.getBoolean("enabled", false) && !accountBanned) telemetryHandler.post(telemetryTask)
+        if (prefs.getString(KEY_API_TOKEN, null) != null) {
+            telemetryHandler.removeCallbacks(banCheckTask)
+            telemetryHandler.post(banCheckTask)
+        }
     }
 
     private fun refreshBanStatus() {
@@ -132,6 +144,8 @@ class MainActivity : Activity() {
                     accountBanned = profile.optBoolean("is_banned", false)
                     banReason = profile.optString("ban_reason", "")
                     if (accountBanned) {
+                        telemetryPrefs.edit().putBoolean("enabled", false).apply()
+                        telemetryHandler.removeCallbacks(telemetryTask)
                         if (!wasBanned || currentScreen !in setOf("banned", "contact", "appeal")) {
                             currentScreen = "banned"
                         }
@@ -149,6 +163,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         telemetryHandler.removeCallbacks(telemetryTask)
+        telemetryHandler.removeCallbacks(banCheckTask)
         super.onPause()
     }
 
