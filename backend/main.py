@@ -389,7 +389,7 @@ def owner_overview(_owner: dict = Depends(current_owner), db: Session = Depends(
     active_installs = db.query(InstallRecord).filter(InstallRecord.last_seen >= active_since).count()
     seen_24h = db.query(InstallRecord).filter(InstallRecord.last_seen >= day_since).count()
     new_users_7d = db.query(User).filter(User.created_at >= now - timedelta(days=7)).count()
-    latest = db.query(InstallRecord).order_by(InstallRecord.last_seen.desc()).limit(8).all()
+    latest = db.query(InstallRecord).order_by(InstallRecord.last_seen.desc()).limit(100).all()
     return {
         "generated_at": now.isoformat(),
         "metrics": {
@@ -425,9 +425,8 @@ def request_ip(request) -> str:
 @app.middleware("http")
 async def enforce_device_bans(request, call_next):
     path = request.url.path
-    allowed = (path in {"/", "/health", "/v1/access/status", "/v1/appeals"}
-               or path.startswith("/v1/admin/")
-               or path in {"/v1/auth/login", "/v1/auth/register", "/v1/telemetry/ping"})
+    allowed = (path in {"/", "/health", "/v1/access/status", "/v1/appeals", "/v1/telemetry/ping"}
+               or path.startswith("/v1/admin/"))
     install_id = request.headers.get("x-assaf-install-id", "").strip()
     if path.startswith("/v1/") and not allowed and install_id:
         with SessionLocal() as db:
