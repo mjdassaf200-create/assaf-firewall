@@ -155,7 +155,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun goTo(screen: String) { currentScreen = screen; buildUi() }
+    private fun goTo(screen: String) {
+        val destination = if (accessBlocked && screen != "contact") "contact" else screen
+        currentScreen = destination
+        buildUi()
+    }
 
     private fun pageRoot(title: String): LinearLayout {
         val scroll = ScrollView(this).apply { setFillViewport(true); setBackgroundColor(navy); isVerticalScrollBarEnabled = false }
@@ -617,7 +621,7 @@ class MainActivity : Activity() {
                 val blocked = result.getOrNull()?.optBoolean("blocked", false) == true
                 runOnUiThread {
                     accessBlocked = blocked
-                    if (blocked && currentScreen != "appeal") goTo("appeal")
+                    if (blocked && currentScreen != "contact") goTo("contact")
                     else if (!blocked && currentScreen == "appeal") goTo("home")
                 }
             }
