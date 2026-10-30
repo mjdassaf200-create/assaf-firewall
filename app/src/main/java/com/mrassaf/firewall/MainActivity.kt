@@ -142,6 +142,7 @@ class MainActivity : Activity() {
             "wifi" -> buildTikTokScreen()
             "tiktok" -> buildTikTokScreen()
             "profile" -> buildProfileScreen()
+            "contact" -> buildContactScreen()
             "plus" -> buildPlusScreen()
             else -> buildHomeScreen()
         }
@@ -598,6 +599,20 @@ class MainActivity : Activity() {
             "ASSAF cannot guarantee a network is safe from connection status alone. Check the router password and use trusted networks.",
             "لا يستطيع ASSAF ضمان أمان الشبكة من حالة الاتصال وحدها. تأكد من كلمة مرور الراوتر واستخدم الشبكات الموثوقة."
         )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+    }
+
+    private fun buildContactScreen() {
+        val root = pageRoot(tr("Contact ASSAF", "تواصل مع عساف"))
+        root.addView(infoCard(tr(
+            "Support chat is being prepared. The next step is connecting messages and replies to the secure owner dashboard.",
+            "نعمل على تجهيز محادثة الدعم. الخطوة التالية هي ربط الرسائل والردود بلوحة المالك بشكل آمن."
+        )), wrap())
+        root.addView(TextView(this).apply {
+            text = tr("Your messages will appear here once the support service is connected.", "ستظهر محادثاتك هنا بعد ربط خدمة الدعم.")
+            textSize = 14f
+            setTextColor(muted)
+            setPadding(dp(4), dp(16), dp(4), 0)
+        }, wrap())
     }
 
     private fun buildProfileScreen() {
