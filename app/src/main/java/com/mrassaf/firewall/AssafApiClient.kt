@@ -57,6 +57,12 @@ object AssafApiClient {
             .put("app_version", appVersion))
     }
 
+    fun sendContactMessage(name: String, message: String) {
+        request("POST", "/v1/contact/messages", body = JSONObject()
+            .put("name", name.trim())
+            .put("message", message.trim()))
+    }
+
     fun authenticate(email: String, password: String, register: Boolean): String {
         val path = if (register) "/v1/auth/register" else "/v1/auth/login"
         val result = JSONObject(request("POST", path, body = JSONObject()
