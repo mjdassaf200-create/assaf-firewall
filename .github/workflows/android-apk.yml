@@ -3,7 +3,7 @@ name: Build ASSAF Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, feature/assaf-v0-3-tapper]
     paths:
       - "app/**"
       - "*.gradle.kts"
