@@ -50,6 +50,9 @@ class MainActivity : Activity() {
     private val appRows = mutableListOf<Pair<String, View>>()
     private val telemetryHandler = Handler(Looper.getMainLooper())
     private val telemetryPrefs by lazy { getSharedPreferences("assaf_telemetry", MODE_PRIVATE) }
+    private val securityPrefs by lazy { getSharedPreferences("assaf_security", MODE_PRIVATE) }
+    private var deviceInstallId: String = ""
+    @Volatile private var accessBlocked = false
     private val telemetryTask = object : Runnable {
         override fun run() {
             if (telemetryPrefs.getBoolean("enabled", false)) {
@@ -80,6 +83,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        deviceInstallId = securityPrefs.getString("install_id", null) ?: UUID.randomUUID().toString().replace("-", "").also { securityPrefs.edit().putString("install_id", it).apply() }
+        AssafApiClient.configureInstallId(deviceInstallId)
         arabic = prefs.getBoolean(KEY_ARABIC, true)
         startHour = prefs.getInt(KEY_START_HOUR, 22)
         startMinute = prefs.getInt(KEY_START_MINUTE, 0)
@@ -111,6 +116,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        checkAccessStatus()
         telemetryHandler.removeCallbacks(telemetryTask)
         if (telemetryPrefs.getBoolean("enabled", false)) telemetryHandler.post(telemetryTask)
     }
@@ -143,6 +149,7 @@ class MainActivity : Activity() {
             "tiktok" -> buildTikTokScreen()
             "profile" -> buildProfileScreen()
             "contact" -> buildContactScreen()
+            "appeal" -> buildAppealScreen()
             "plus" -> buildPlusScreen()
             else -> buildHomeScreen()
         }
@@ -599,6 +606,83 @@ class MainActivity : Activity() {
             "ASSAF cannot guarantee a network is safe from connection status alone. Check the router password and use trusted networks.",
             "لا يستطيع ASSAF ضمان أمان الشبكة من حالة الاتصال وحدها. تأكد من كلمة مرور الراوتر واستخدم الشبكات الموثوقة."
         )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+    }
+
+
+    private fun checkAccessStatus() {
+        if (deviceInstallId.isBlank()) return
+        Thread {
+            val result = runCatching { AssafApiClient.accessStatus() }
+            if (result.isSuccess) {
+                val blocked = result.getOrNull()?.optBoolean("blocked", false) == true
+                runOnUiThread {
+                    accessBlocked = blocked
+                    if (blocked && currentScreen != "appeal") goTo("appeal")
+                    else if (!blocked && currentScreen == "appeal") goTo("home")
+                }
+            }
+        }.start()
+    }
+
+    private fun buildAppealScreen() {
+        val scroll = ScrollView(this).apply { setFillViewport(true); setBackgroundColor(navy); isVerticalScrollBarEnabled = false }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(22), dp(34), dp(22), dp(28))
+            setBackgroundResource(R.drawable.assaf_background)
+            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        }
+        scroll.addView(root)
+        root.addView(TextView(this).apply {
+            text = "A"; textSize = 54f; typeface = Typeface.DEFAULT_BOLD
+            setTextColor(blue); gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(82)))
+        root.addView(TextView(this).apply {
+            text = tr("ASSAF ACCESS RESTRICTED", "تم تقييد وصولك إلى ASSAF")
+            textSize = 21f; typeface = Typeface.DEFAULT_BOLD; setTextColor(white); gravity = Gravity.CENTER
+        }, wrap())
+        root.addView(infoCard(tr(
+            "Your access to the app features is currently restricted. You can submit one appeal for the owner to review.",
+            "تم تقييد وصولك إلى وظائف التطبيق حاليًا. يمكنك تقديم طعن واحد ليقوم المالك بمراجعته."
+        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(18); bottomMargin = dp(16) })
+        val appealInput = EditText(this).apply {
+            hint = tr("Explain why you believe this restriction should be reviewed…", "اشرح لماذا تعتقد أن هذا الحظر يحتاج إلى مراجعة…")
+            setTextColor(white); setHintTextColor(muted); textSize = 15f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 5; gravity = Gravity.TOP or Gravity.START; setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = rounded(panel, 14)
+        }
+        root.addView(appealInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(150)).apply { bottomMargin = dp(14) })
+        val statusText = TextView(this).apply { textSize = 13f; setTextColor(muted); gravity = Gravity.CENTER }
+        root.addView(statusText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
+        val sendButton = primaryButton(tr("Submit appeal", "تقديم الطعن"))
+        root.addView(sendButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+        sendButton.setOnClickListener {
+            val message = appealInput.text.toString().trim()
+            if (message.length < 10) {
+                appealInput.error = tr("Please explain your appeal in at least 10 characters", "اكتب تفاصيل الطعن (10 أحرف على الأقل)")
+                return@setOnClickListener
+            }
+            sendButton.isEnabled = false
+            sendButton.text = tr("Submitting…", "جارٍ إرسال الطعن…")
+            Thread {
+                val result = runCatching { AssafApiClient.submitAppeal(deviceInstallId, message) }
+                runOnUiThread {
+                    sendButton.isEnabled = true
+                    sendButton.text = tr("Submit appeal", "تقديم الطعن")
+                    if (result.isSuccess) {
+                        appealInput.text.clear()
+                        appealInput.isEnabled = false
+                        sendButton.isEnabled = false
+                        statusText.text = tr("Your appeal was received and is waiting for review.", "تم استلام طعنك وهو الآن بانتظار مراجعة المالك.")
+                    } else {
+                        statusText.text = result.exceptionOrNull()?.message ?: tr("Could not submit appeal.", "تعذّر إرسال الطعن.")
+                    }
+                }
+            }.start()
+        }
+        setContentView(scroll)
     }
 
     private fun buildContactScreen() {
