@@ -49,7 +49,16 @@ object AssafApiClient {
 
     fun checkHealth(): String = request("GET", "/health")
 
-    fun analyzeLink(url: String): JSONObject = JSONObject(request("POST", "/v1/link-check/analyze", body = JSONObject().put("url", url)))
+    fun analyzeLink(url: String, token: String? = null): JSONObject =
+        JSONObject(request("POST", "/v1/link-check/analyze", token, JSONObject().put("url", url)))
+
+    fun getMe(token: String): JSONObject = JSONObject(request("GET", "/v1/me", token))
+
+    fun submitContact(message: String, token: String? = null): JSONObject =
+        JSONObject(request("POST", "/v1/support/messages", token, JSONObject().put("message", message)))
+
+    fun submitAppeal(token: String, message: String): JSONObject =
+        JSONObject(request("POST", "/v1/appeals", token, JSONObject().put("message", message)))
 
     fun pingTelemetry(installId: String, appVersion: String) {
         request("POST", "/v1/telemetry/ping", body = JSONObject()
