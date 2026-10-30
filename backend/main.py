@@ -304,7 +304,20 @@ class InstallRecord(Base):
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
+class ContactMessage(Base):
+    __tablename__ = "contact_messages"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+
 Base.metadata.create_all(bind=engine)
+
+class ContactMessageInput(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    message: str = Field(min_length=1, max_length=2000)
+
 
 class OwnerLoginRequest(BaseModel):
     email: EmailStr
@@ -368,6 +381,32 @@ def owner_overview(_owner: dict = Depends(current_owner), db: Session = Depends(
             "reported_installs": "Unique installation IDs reported by the app, not APK downloads from a store.",
         },
     }
+
+@app.post("/v1/contact/messages", status_code=201, tags=["contact"])
+def create_contact_message(body: ContactMessageInput, db: Session = Depends(get_db)):
+    name = body.name.strip()
+    message = body.message.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Please enter your name")
+    if not message:
+        raise HTTPException(status_code=422, detail="Please write a message")
+    row = ContactMessage(name=name, message=message)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "name": row.name, "message": row.message, "created_at": row.created_at}
+
+
+@app.get("/v1/admin/contact-messages", tags=["owner"])
+def owner_contact_messages(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    rows = db.query(ContactMessage).order_by(ContactMessage.created_at.desc()).limit(200).all()
+    return {
+        "messages": [
+            {"id": row.id, "name": row.name, "message": row.message, "created_at": row.created_at.isoformat()}
+            for row in rows
+        ]
+    }
+
 
 @app.post("/v1/telemetry/ping", status_code=204, tags=["telemetry"])
 def telemetry_ping(body: TelemetryPing, db: Session = Depends(get_db)):
