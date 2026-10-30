@@ -602,17 +602,67 @@ class MainActivity : Activity() {
     }
 
     private fun buildContactScreen() {
-        val root = pageRoot(tr("Contact ASSAF", "تواصل مع عساف"))
+        val root = pageRoot(tr("Contact the owner", "تواصل مع المالك"))
         root.addView(infoCard(tr(
-            "Support chat is being prepared. The next step is connecting messages and replies to the secure owner dashboard.",
-            "نعمل على تجهيز محادثة الدعم. الخطوة التالية هي ربط الرسائل والردود بلوحة المالك بشكل آمن."
-        )), wrap())
-        root.addView(TextView(this).apply {
-            text = tr("Your messages will appear here once the support service is connected.", "ستظهر محادثاتك هنا بعد ربط خدمة الدعم.")
-            textSize = 14f
-            setTextColor(muted)
-            setPadding(dp(4), dp(16), dp(4), 0)
-        }, wrap())
+            "Send a message directly to the ASSAF owner. Your name is required so the owner knows who to reply to.",
+            "ابعث رسالتك مباشرة إلى مالك ASSAF. كتابة اسمك إلزامية حتى يعرف المالك مين صاحب الرسالة ويرد عليك."
+        )), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(14) })
+
+        val nameInput = EditText(this).apply {
+            hint = tr("Your full name (required)", "اسمك (إجباري)")
+            setTextColor(white); setHintTextColor(muted); textSize = 16f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            setSingleLine(true); setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = rounded(panel, 14)
+        }
+        root.addView(nameInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)).apply { bottomMargin = dp(12) })
+
+        val messageInput = EditText(this).apply {
+            hint = tr("Write your message here…", "اكتب رسالتك هنا…")
+            setTextColor(white); setHintTextColor(muted); textSize = 16f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 5; gravity = Gravity.TOP or Gravity.START
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = rounded(panel, 14)
+        }
+        root.addView(messageInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(150)).apply { bottomMargin = dp(14) })
+
+        val sendButton = primaryButton(tr("Send message", "إرسال الرسالة"))
+        root.addView(sendButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+        sendButton.setOnClickListener {
+            val senderName = nameInput.text.toString().trim()
+            val message = messageInput.text.toString().trim()
+            if (senderName.isBlank()) {
+                nameInput.error = tr("Please enter your name", "اكتب اسمك أولاً")
+                nameInput.requestFocus()
+                return@setOnClickListener
+            }
+            if (message.isBlank()) {
+                messageInput.error = tr("Please write a message", "اكتب رسالتك أولاً")
+                messageInput.requestFocus()
+                return@setOnClickListener
+            }
+            if (senderName.length > 80 || message.length > 2000) {
+                Toast.makeText(this, tr("Name or message is too long", "الاسم أو الرسالة أطول من المسموح"), Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            sendButton.isEnabled = false
+            sendButton.text = tr("Sending…", "جارٍ الإرسال…")
+            Thread {
+                val result = runCatching { AssafApiClient.sendContactMessage(senderName, message) }
+                runOnUiThread {
+                    sendButton.isEnabled = true
+                    sendButton.text = tr("Send message", "إرسال الرسالة")
+                    if (result.isSuccess) {
+                        nameInput.text.clear()
+                        messageInput.text.clear()
+                        Toast.makeText(this, tr("Your message was sent to the owner", "تم إرسال رسالتك إلى المالك بنجاح"), Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this, tr("Could not send the message. Check your internet and try again.", "تعذّر إرسال الرسالة. تأكد من الإنترنت وحاول مرة ثانية."), Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.start()
+        }
     }
 
     private fun buildProfileScreen() {
