@@ -8,7 +8,7 @@ from typing import Generator
 from uuid import uuid4
 
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -430,7 +430,7 @@ async def enforce_device_bans(request, call_next):
     return await call_next(request)
 
 @app.get("/v1/access/status", tags=["access"])
-def access_status(request):
+def access_status(request: Request):
     install_id = request.headers.get("x-assaf-install-id", "").strip()
     if not install_id:
         raise HTTPException(status_code=400, detail="Installation ID is required")
@@ -442,7 +442,7 @@ def access_status(request):
                 "appeal_status": latest.status if latest else None}
 
 @app.post("/v1/appeals", status_code=201, tags=["appeals"])
-def submit_appeal(body: AppealInput, request, db: Session = Depends(get_db)):
+def submit_appeal(body: AppealInput, request: Request, db: Session = Depends(get_db)):
     header_id = request.headers.get("x-assaf-install-id", "").strip()
     if not header_id or header_id != body.install_id:
         raise HTTPException(status_code=400, detail="Installation ID mismatch")
