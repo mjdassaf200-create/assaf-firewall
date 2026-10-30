@@ -12,6 +12,8 @@ import java.net.URL
  */
 object AssafApiClient {
     const val BASE_URL = "https://assaf-firewall-1.onrender.com"
+    @Volatile private var deviceInstallId: String? = null
+    fun configureInstallId(value: String) { deviceInstallId = value }
 
     private fun request(
         method: String,
@@ -24,6 +26,7 @@ object AssafApiClient {
             connectTimeout = 15000
             readTimeout = 20000
             setRequestProperty("Accept", "application/json")
+            deviceInstallId?.let { setRequestProperty("X-ASSAF-Install-ID", it) }
             if (body != null) {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -56,6 +59,12 @@ object AssafApiClient {
             .put("install_id", installId)
             .put("app_version", appVersion))
     }
+
+    fun accessStatus(): JSONObject = JSONObject(request("GET", "/v1/access/status"))
+
+    fun submitAppeal(installId: String, message: String): JSONObject = JSONObject(request("POST", "/v1/appeals", body = JSONObject()
+        .put("install_id", installId)
+        .put("message", message.trim())))
 
     fun sendContactMessage(name: String, message: String) {
         request("POST", "/v1/contact/messages", body = JSONObject()
