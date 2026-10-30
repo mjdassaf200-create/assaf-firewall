@@ -90,8 +90,17 @@ class TikTokTapAccessibilityService : AccessibilityService() {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP or Gravity.END; x = 24; y = 260 }
-        try { windowManager?.addView(view, params); bubble = view } catch (_: Exception) {}
+        ).apply { gravity = Gravity.TOP or Gravity.END; x = 16; y = 0 }
+        try {
+            windowManager?.addView(view, params)
+            bubble = view
+            // Keep the floating control vertically centered against the right edge.
+            view.post {
+                val centered = view.layoutParams as? WindowManager.LayoutParams ?: return@post
+                centered.y = ((resources.displayMetrics.heightPixels - view.height) / 2).coerceAtLeast(0)
+                runCatching { windowManager?.updateViewLayout(view, centered) }
+            }
+        } catch (_: Exception) {}
     }
 
     private fun startTapping() {
@@ -114,7 +123,9 @@ class TikTokTapAccessibilityService : AccessibilityService() {
                 stopTapping(); return
             }
             val dm = resources.displayMetrics
-            val path = Path().apply { moveTo(dm.widthPixels / 2f, dm.heightPixels / 2f) }
+            // Tap near the left edge at the vertical midpoint; the ASSAF bubble stays on the right.
+            val tapX = (24f * dm.density).coerceAtMost(dm.widthPixels / 2f)
+            val path = Path().apply { moveTo(tapX, dm.heightPixels / 2f) }
             val gesture = GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0, 35))
                 .build()
