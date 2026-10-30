@@ -443,8 +443,17 @@ def access_status(request: Request):
     if not install_id:
         raise HTTPException(status_code=400, detail="Installation ID is required")
     with SessionLocal() as db:
+        now = datetime.now(timezone.utc)
+        record = db.get(InstallRecord, install_id)
+        if record is None:
+            record = InstallRecord(install_id=install_id, app_version="unknown", first_seen=now, last_seen=now, ip_address=request_ip(request))
+            db.add(record)
+        else:
+            record.last_seen = now
+            record.ip_address = request_ip(request)
         ban = db.get(DeviceBan, install_id)
         latest = db.scalar(select(Appeal).where(Appeal.install_id == install_id).order_by(Appeal.created_at.desc()))
+        db.commit()
         return {"blocked": bool(ban and ban.active),
                 "ban_reason": ban.reason if ban and ban.active else "",
                 "appeal_status": latest.status if latest else None}
