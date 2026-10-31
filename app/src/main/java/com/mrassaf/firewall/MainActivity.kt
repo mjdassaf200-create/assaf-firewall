@@ -13,6 +13,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import android.net.Uri
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -821,6 +823,17 @@ class MainActivity : Activity() {
                 autoHandler.postDelayed(this, 1000L)
             }
         }
+        root.addView(primaryButton(tr("SHOW FLOATING COUNTER", "إظهار العداد العائم")).apply {
+            setOnClickListener {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this@MainActivity)) {
+                    Toast.makeText(this@MainActivity, tr("Allow ASSAF to display over other apps, then return and tap this button again.", "اسمح لـ ASSAF بالظهور فوق التطبيقات، ثم ارجع واضغط الزر مرة أخرى."), Toast.LENGTH_LONG).show()
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                } else {
+                    startService(Intent(this@MainActivity, AssafFloatingCounterService::class.java))
+                    Toast.makeText(this@MainActivity, tr("Floating counter opened. Its 15/s counter does not send touches to other apps.", "ظهر العداد العائم. عدّاد 15/ثانية لا يرسل نقرات للتطبيقات الأخرى."), Toast.LENGTH_LONG).show()
+                }
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
         val startButton = primaryButton(tr("START AUTO COUNTER", "ابدأ العد التلقائي")).apply {
             setOnClickListener {
                 if (!running) {
