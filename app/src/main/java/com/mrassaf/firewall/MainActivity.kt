@@ -715,8 +715,8 @@ class MainActivity : Activity() {
     private fun buildTappingScreen() {
         val root = pageRoot(tr("Tap helper", "مساعد النقر"))
         root.addView(infoCard(tr(
-            "Choose a screen position and interval. Android Accessibility permission is required. This helper automatically stops in TikTok and TikTok LIVE.",
-            "حدد مكان النقر والفاصل الزمني. يلزم تفعيل صلاحية تسهيلات الاستخدام. يتوقف المساعد تلقائيًا داخل تيك توك والبث المباشر."
+            "Choose a screen position and interval. Android Accessibility permission is required to perform taps. ASSAF does not read screen text or inspect screen contents, and stops when TikTok opens.",
+            "حدد مكان النقر والفاصل الزمني. يلزم إذن تسهيلات الاستخدام لتنفيذ النقرات فقط. ASSAF لا يقرأ نصوص الشاشة ولا يفحص محتواها، ويتوقف عند فتح تيك توك."
         )), wrap())
 
         fun numberField(hintText: String, defaultValue: String): EditText = EditText(this).apply {
