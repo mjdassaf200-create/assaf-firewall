@@ -751,15 +751,18 @@ class MainActivity : Activity() {
             }
         }
         root.addView(countButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
-        root.addView(smallButton().apply {
+        val startButton = smallButton().apply {
             text = tr("Start session", "بدء الجلسة")
             setOnClickListener {
                 running = true
                 startedAt = android.os.SystemClock.elapsedRealtime()
                 stateView.text = tr("Session running — tap Count a tap for each tap you make", "الجلسة تعمل — اضغط احسب تكبيسة مع كل نقرة تقوم بها")
                 isEnabled = false
+                countButton.isEnabled = true
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
+        }
+        countButton.isEnabled = false
+        root.addView(startButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
         root.addView(smallButton().apply {
             text = tr("Stop and reset session", "إيقاف وتصفير الجلسة")
             setOnClickListener {
@@ -770,6 +773,7 @@ class MainActivity : Activity() {
                 stateView.text = tr("Session stopped", "تم إيقاف الجلسة")
                 startedAt = 0L
                 countButton.isEnabled = false
+                startButton.isEnabled = true
             }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) })
         root.addView(primaryButton(tr("Open TikTok", "فتح تيك توك")).apply {
