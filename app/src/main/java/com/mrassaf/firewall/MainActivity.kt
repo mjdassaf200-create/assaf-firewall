@@ -714,18 +714,71 @@ class MainActivity : Activity() {
 
     private fun buildTappingScreen() {
         val root = pageRoot(tr("ASSAF Tapper", "مساعد التكبيس"))
+        val tapPrefs = getSharedPreferences("assaf_manual_tapper", MODE_PRIVATE)
+        var taps = tapPrefs.getInt("count", 0)
+        var running = false
+        var startedAt = 0L
+        val countView = TextView(this).apply {
+            text = taps.toString()
+            textSize = 42f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(white)
+            setPadding(0, dp(22), 0, dp(8))
+        }
+        val stateView = TextView(this).apply {
+            text = tr("Ready", "جاهز")
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(muted)
+            setPadding(0, 0, 0, dp(18))
+        }
         root.addView(infoCard(tr(
-            "Automatic tapping is temporarily unavailable in this public build while we work on a safer, Play Protect-friendly approach. ASSAF does not request Accessibility access in this version.",
-            "ميزة التكبيس التلقائي غير متاحة مؤقتًا في هذه النسخة العامة، إلى أن نجهز طريقة أكثر أمانًا ومتوافقة مع حماية Google Play. هذه النسخة لا تطلب صلاحية تسهيلات الاستخدام."
+            "Manual tap counter: count your own taps while using TikTok. ASSAF does not control TikTok or generate likes automatically, and does not need Accessibility permission.",
+            "عداد تكبيس يدوي: احسب نقراتك بنفسك أثناء استخدام تيك توك. ASSAF لا يتحكم بتيك توك ولا ينشئ إعجابات تلقائيًا، ولا يحتاج صلاحية تسهيلات الاستخدام."
         )), wrap())
+        root.addView(countView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        root.addView(stateView, wrap())
+        val countButton = primaryButton(tr("Count a tap", "احسب تكبيسة")).apply {
+            setOnClickListener {
+                if (!running) {
+                    Toast.makeText(this@MainActivity, tr("Start the session first", "ابدأ الجلسة أولًا"), Toast.LENGTH_SHORT).show()
+                } else {
+                    taps += 1
+                    tapPrefs.edit().putInt("count", taps).apply()
+                    countView.text = taps.toString()
+                }
+            }
+        }
+        root.addView(countButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
+        root.addView(smallButton().apply {
+            text = tr("Start session", "بدء الجلسة")
+            setOnClickListener {
+                running = true
+                startedAt = android.os.SystemClock.elapsedRealtime()
+                stateView.text = tr("Session running — tap Count a tap for each tap you make", "الجلسة تعمل — اضغط احسب تكبيسة مع كل نقرة تقوم بها")
+                isEnabled = false
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
+        root.addView(smallButton().apply {
+            text = tr("Stop and reset session", "إيقاف وتصفير الجلسة")
+            setOnClickListener {
+                running = false
+                taps = 0
+                tapPrefs.edit().putInt("count", 0).apply()
+                countView.text = "0"
+                stateView.text = tr("Session stopped", "تم إيقاف الجلسة")
+                startedAt = 0L
+                countButton.isEnabled = false
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) })
         root.addView(primaryButton(tr("Open TikTok", "فتح تيك توك")).apply {
             setOnClickListener {
                 val launch = packageManager.getLaunchIntentForPackage("com.zhiliaoapp.musically") ?: packageManager.getLaunchIntentForPackage("com.ss.android.ugc.trill")
                 if (launch != null) startActivity(launch) else Toast.makeText(this@MainActivity, tr("TikTok is not installed", "تيك توك غير مثبت"), Toast.LENGTH_LONG).show()
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(14) })
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(10) })
     }
-    private fun prefsTap() = getSharedPreferences("assaf_tapper", MODE_PRIVATE)
 
         // Separate app screen: only the six requested apps appear here.
     private fun buildAppsScreen() {
