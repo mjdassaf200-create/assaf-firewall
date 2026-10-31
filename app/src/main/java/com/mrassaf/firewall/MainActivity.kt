@@ -724,45 +724,109 @@ class MainActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setTextColor(white)
-            setPadding(0, dp(22), 0, dp(8))
+            setPadding(0, dp(16), 0, dp(4))
         }
         val stateView = TextView(this).apply {
             text = tr("Ready", "جاهز")
             textSize = 14f
             gravity = Gravity.CENTER
             setTextColor(muted)
-            setPadding(0, 0, 0, dp(18))
+            setPadding(0, 0, 0, dp(12))
         }
         root.addView(infoCard(tr(
-            "Manual tap counter: count your own taps while using TikTok. ASSAF does not control TikTok or generate likes automatically, and does not need Accessibility permission.",
-            "عداد تكبيس يدوي: احسب نقراتك بنفسك أثناء استخدام تيك توك. ASSAF لا يتحكم بتيك توك ولا ينشئ إعجابات تلقائيًا، ولا يحتاج صلاحية تسهيلات الاستخدام."
+            "Move the ASSAF tap button anywhere inside this screen and tap it to count your own actions. It does not tap inside TikTok or create automatic likes. No Accessibility permission is needed.",
+            "حرّك زر التكبيس داخل هذه الشاشة إلى المكان الذي تريده واضغط عليه لعدّ نقراتك بنفسك. الزر لا ينقر داخل تيك توك ولا ينشئ إعجابات تلقائية، ولا يحتاج صلاحية تسهيلات الاستخدام."
         )), wrap())
         root.addView(countView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(stateView, wrap())
-        val countButton = primaryButton(tr("Count a tap", "احسب تكبيسة")).apply {
-            setOnClickListener {
-                if (!running) {
-                    Toast.makeText(this@MainActivity, tr("Start the session first", "ابدأ الجلسة أولًا"), Toast.LENGTH_SHORT).show()
-                } else {
-                    taps += 1
-                    tapPrefs.edit().putInt("count", taps).apply()
-                    countView.text = taps.toString()
+
+        val playArea = FrameLayout(this).apply {
+            background = rounded(panel, 18)
+            clipToPadding = true
+        }
+        val tapTarget = TextView(this).apply {
+            text = tr("TAP", "تكبيس")
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(blue)
+                setStroke(dp(3), Color.rgb(120, 190, 255))
+            }
+            elevation = dp(5).toFloat()
+            isClickable = true
+            isFocusable = true
+            contentDescription = tr("Movable manual tap counter", "زر عدّ النقرات قابل للتحريك")
+        }
+        playArea.addView(tapTarget, FrameLayout.LayoutParams(dp(76), dp(76)).apply {
+            gravity = Gravity.TOP or Gravity.START
+            leftMargin = dp(24)
+            topMargin = dp(24)
+        })
+        root.addView(playArea, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(260)).apply {
+            topMargin = dp(10)
+            bottomMargin = dp(12)
+        })
+
+        val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+        var downX = 0f
+        var downY = 0f
+        var startLeft = 0
+        var startTop = 0
+        var dragged = false
+        tapTarget.setOnTouchListener { view, event ->
+            val params = view.layoutParams as FrameLayout.LayoutParams
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    startLeft = params.leftMargin
+                    startTop = params.topMargin
+                    dragged = false
+                    true
                 }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = (event.rawX - downX).toInt()
+                    val dy = (event.rawY - downY).toInt()
+                    if (kotlin.math.abs(dx) > touchSlop || kotlin.math.abs(dy) > touchSlop) dragged = true
+                    val maxLeft = (playArea.width - view.width).coerceAtLeast(0)
+                    val maxTop = (playArea.height - view.height).coerceAtLeast(0)
+                    params.leftMargin = (startLeft + dx).coerceIn(0, maxLeft)
+                    params.topMargin = (startTop + dy).coerceIn(0, maxTop)
+                    view.layoutParams = params
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    if (!dragged) {
+                        if (running) {
+                            taps += 1
+                            tapPrefs.edit().putInt("count", taps).apply()
+                            countView.text = taps.toString()
+                        } else {
+                            Toast.makeText(this, tr("Start the session first", "ابدأ الجلسة أولًا"), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    view.performClick()
+                    true
+                }
+                android.view.MotionEvent.ACTION_CANCEL -> true
+                else -> true
             }
         }
-        root.addView(countButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
+        tapTarget.setOnClickListener { /* Tap counting is handled on touch-up after drag detection. */ }
+
         val startButton = smallButton().apply {
             text = tr("Start session", "بدء الجلسة")
             setOnClickListener {
                 running = true
                 startedAt = android.os.SystemClock.elapsedRealtime()
-                stateView.text = tr("Session running — tap Count a tap for each tap you make", "الجلسة تعمل — اضغط احسب تكبيسة مع كل نقرة تقوم بها")
+                stateView.text = tr("Session running — move and tap the blue button", "الجلسة تعمل — حرّك الزر الأزرق واضغطه")
                 isEnabled = false
-                countButton.isEnabled = true
             }
         }
-        countButton.isEnabled = false
-        root.addView(startButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
+        root.addView(startButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         root.addView(smallButton().apply {
             text = tr("Stop and reset session", "إيقاف وتصفير الجلسة")
             setOnClickListener {
@@ -772,14 +836,15 @@ class MainActivity : Activity() {
                 countView.text = "0"
                 stateView.text = tr("Session stopped", "تم إيقاف الجلسة")
                 startedAt = 0L
-                countButton.isEnabled = false
                 startButton.isEnabled = true
             }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) })
         root.addView(primaryButton(tr("Open TikTok", "فتح تيك توك")).apply {
             setOnClickListener {
-                val launch = packageManager.getLaunchIntentForPackage("com.zhiliaoapp.musically") ?: packageManager.getLaunchIntentForPackage("com.ss.android.ugc.trill")
-                if (launch != null) startActivity(launch) else Toast.makeText(this@MainActivity, tr("TikTok is not installed", "تيك توك غير مثبت"), Toast.LENGTH_LONG).show()
+                val launch = packageManager.getLaunchIntentForPackage("com.zhiliaoapp.musically")
+                    ?: packageManager.getLaunchIntentForPackage("com.ss.android.ugc.trill")
+                if (launch != null) startActivity(launch)
+                else Toast.makeText(this@MainActivity, tr("TikTok is not installed", "تيك توك غير مثبت"), Toast.LENGTH_LONG).show()
             }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(10) })
     }
