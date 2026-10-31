@@ -715,160 +715,61 @@ class MainActivity : Activity() {
     }
 
     private fun buildTappingScreen() {
-        val root = pageRoot(tr("ASSAF Tapper", "مساعد التكبيس"))
-        val tapPrefs = getSharedPreferences("assaf_manual_tapper", MODE_PRIVATE)
-        var taps = tapPrefs.getInt("count", 0)
-        var running = false
-        val autoHandler = Handler(Looper.getMainLooper())
-        lateinit var autoTask: Runnable
-        val countView = TextView(this).apply {
-            text = taps.toString()
-            textSize = 42f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setTextColor(white)
-            setPadding(0, dp(16), 0, dp(4))
-        }
-        val stateView = TextView(this).apply {
-            text = tr("Ready", "جاهز")
-            textSize = 14f
-            gravity = Gravity.CENTER
-            setTextColor(muted)
-            setPadding(0, 0, 0, dp(12))
-        }
+        val root = pageRoot(tr("ASSAF TikTok Tapper", "مساعد تكبيس تيك توك"))
         root.addView(infoCard(tr(
-            "This demo repeats a counter inside ASSAF only. It does not send touches to TikTok or other apps and does not create likes. Start and stop it here; no Accessibility permission is needed.",
-            "هذه الأداة تكرّر العدّ داخل ASSAF فقط. لا ترسل نقرات إلى تيك توك أو التطبيقات الأخرى ولا تنشئ إعجابات. ابدأ وأوقفها من هنا؛ ولا تحتاج صلاحية تسهيلات الاستخدام."
+            "This tool sends real screen taps using Android Accessibility. Enable the ASSAF tap service and overlay permission, open TikTok, drag the floating target onto the exact place you want to tap, then press START. Use only where automated tapping is allowed.",
+            "هذه الأداة ترسل نقرات فعلية للشاشة عبر تسهيلات الاستخدام في أندرويد. فعّل خدمة التكبيس العائمة وصلاحية الظهور فوق التطبيقات، ثم افتح تيك توك واسحب مؤشر الهدف إلى المكان المطلوب واضغط ابدأ. استخدمها فقط حيث يُسمح بالتكبيس الآلي."
         )), wrap())
-        root.addView(countView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        root.addView(stateView, wrap())
 
-        val playArea = FrameLayout(this).apply {
-            background = rounded(panel, 18)
-            clipToPadding = true
+        val serviceStatus = infoCard("")
+        fun refreshStatus() {
+            val accessibilityOn = AssafTapAccessibilityService.isEnabled(this)
+            val overlayOn = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+            serviceStatus.text = tr(
+                "Accessibility: " + if (accessibilityOn) "Enabled" else "Not enabled" + "\nOverlay permission: " + if (overlayOn) "Granted" else "Required",
+                "تسهيلات الاستخدام: " + if (accessibilityOn) "مفعّلة" else "غير مفعّلة" + "\nصلاحية الظهور فوق التطبيقات: " + if (overlayOn) "ممنوحة" else "مطلوبة"
+            )
         }
-        val tapTarget = TextView(this).apply {
-            text = tr("TAP", "تكبيس")
-            textSize = 16f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(blue)
-                setStroke(dp(3), Color.rgb(120, 190, 255))
-            }
-            elevation = dp(5).toFloat()
-            isClickable = true
-            isFocusable = true
-            contentDescription = tr("Movable manual tap counter", "زر عدّ النقرات قابل للتحريك")
-        }
-        playArea.addView(tapTarget, FrameLayout.LayoutParams(dp(76), dp(76)).apply {
-            gravity = Gravity.TOP or Gravity.START
-            leftMargin = dp(24)
-            topMargin = dp(24)
-        })
-        root.addView(playArea, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(260)).apply {
-            topMargin = dp(10)
-            bottomMargin = dp(12)
-        })
+        refreshStatus()
+        root.addView(serviceStatus, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
 
-        val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
-        var downX = 0f
-        var downY = 0f
-        var startLeft = 0
-        var startTop = 0
-        var dragged = false
-        tapTarget.setOnTouchListener { view, event ->
-            val params = view.layoutParams as FrameLayout.LayoutParams
-            when (event.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> {
-                    downX = event.rawX
-                    downY = event.rawY
-                    startLeft = params.leftMargin
-                    startTop = params.topMargin
-                    dragged = false
-                    true
-                }
-                android.view.MotionEvent.ACTION_MOVE -> {
-                    val dx = (event.rawX - downX).toInt()
-                    val dy = (event.rawY - downY).toInt()
-                    if (kotlin.math.abs(dx) > touchSlop || kotlin.math.abs(dy) > touchSlop) dragged = true
-                    val maxLeft = (playArea.width - view.width).coerceAtLeast(0)
-                    val maxTop = (playArea.height - view.height).coerceAtLeast(0)
-                    params.leftMargin = (startLeft + dx).coerceIn(0, maxLeft)
-                    params.topMargin = (startTop + dy).coerceIn(0, maxTop)
-                    view.layoutParams = params
-                    true
-                }
-                android.view.MotionEvent.ACTION_UP -> {
-                    if (!dragged && !running) {
-                        Toast.makeText(this, tr("Use START to run the counter", "اضغط ابدأ لتشغيل العداد"), Toast.LENGTH_SHORT).show()
-                    }
-                    view.performClick()
-                    true
-                }
-                android.view.MotionEvent.ACTION_CANCEL -> true
-                else -> true
+        root.addView(primaryButton(tr("1. Enable tap accessibility", "1. تفعيل صلاحية التكبيس")).apply {
+            setOnClickListener {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                Toast.makeText(this@MainActivity, tr("Find ASSAF Tap Service and turn it on, then return here.", "ابحث عن خدمة تكبيس ASSAF وفعّلها ثم ارجع إلى هنا."), Toast.LENGTH_LONG).show()
             }
-        }
-        tapTarget.setOnClickListener { /* Tap counting is handled on touch-up after drag detection. */ }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { bottomMargin = dp(8) })
 
-        autoTask = object : Runnable {
-            override fun run() {
-                if (!running || isFinishing) return
-                taps += 1
-                tapPrefs.edit().putInt("count", taps).apply()
-                countView.text = taps.toString()
-                autoHandler.postDelayed(this, 1000L)
-            }
-        }
-        root.addView(primaryButton(tr("SHOW FLOATING COUNTER", "إظهار العداد العائم")).apply {
+        root.addView(primaryButton(tr("2. Allow display over other apps", "2. السماح بالظهور فوق التطبيقات")).apply {
             setOnClickListener {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this@MainActivity)) {
-                    Toast.makeText(this@MainActivity, tr("Allow ASSAF to display over other apps, then return and tap this button again.", "اسمح لـ ASSAF بالظهور فوق التطبيقات، ثم ارجع واضغط الزر مرة أخرى."), Toast.LENGTH_LONG).show()
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                } else {
+                    Toast.makeText(this@MainActivity, tr("Overlay permission is already allowed.", "صلاحية الظهور فوق التطبيقات مفعّلة بالفعل."), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { bottomMargin = dp(8) })
+
+        root.addView(primaryButton(tr("3. Show floating target and controls", "3. إظهار مؤشر الهدف وأزرار التحكم")).apply {
+            setOnClickListener {
+                refreshStatus()
+                if (!AssafTapAccessibilityService.isEnabled(this@MainActivity)) {
+                    Toast.makeText(this@MainActivity, tr("Enable ASSAF Tap Service first.", "فعّل خدمة تكبيس ASSAF أولاً."), Toast.LENGTH_LONG).show()
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this@MainActivity)) {
+                    Toast.makeText(this@MainActivity, tr("Allow overlay permission first.", "اسمح بصلاحية الظهور فوق التطبيقات أولاً."), Toast.LENGTH_LONG).show()
                     startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
                 } else {
                     startService(Intent(this@MainActivity, AssafFloatingCounterService::class.java))
-                    Toast.makeText(this@MainActivity, tr("Floating counter opened. Its 15/s counter does not send touches to other apps.", "ظهر العداد العائم. عدّاد 15/ثانية لا يرسل نقرات للتطبيقات الأخرى."), Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, tr("Floating target ready. Open TikTok and drag the blue target onto the desired point.", "مؤشر التكبيس جاهز. افتح تيك توك واسحب الهدف الأزرق إلى المكان المطلوب."), Toast.LENGTH_LONG).show()
                 }
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
-        val startButton = primaryButton(tr("START AUTO COUNTER", "ابدأ العد التلقائي")).apply {
-            setOnClickListener {
-                if (!running) {
-                    running = true
-                    stateView.text = tr("Auto counter running inside ASSAF", "العد التلقائي يعمل داخل ASSAF")
-                    isEnabled = false
-                    autoHandler.postDelayed(autoTask, 1000L)
-                }
-            }
-        }
-        root.addView(startButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
-        root.addView(primaryButton(tr("STOP", "إيقاف")).apply {
-            setOnClickListener {
-                running = false
-                autoHandler.removeCallbacks(autoTask)
-                stateView.text = tr("Stopped", "متوقف")
-                startButton.isEnabled = true
-            }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(8) })
-        root.addView(smallButton().apply {
-            text = tr("Reset counter", "تصفير العداد")
-            setOnClickListener {
-                taps = 0
-                tapPrefs.edit().putInt("count", 0).apply()
-                countView.text = "0"
-            }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(8) })
-        root.addView(primaryButton(tr("Open TikTok", "فتح تيك توك")).apply {
-            setOnClickListener {
-                val launch = packageManager.getLaunchIntentForPackage("com.zhiliaoapp.musically")
-                    ?: packageManager.getLaunchIntentForPackage("com.ss.android.ugc.trill")
-                if (launch != null) startActivity(launch)
-                else Toast.makeText(this@MainActivity, tr("TikTok is not installed", "تيك توك غير مثبت"), Toast.LENGTH_LONG).show()
-            }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(10) })
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+
+        root.addView(TextView(this).apply {
+            text = tr("Fixed speed: up to 15 taps/second. Actual speed depends on the phone and Android. The counter shows completed tap gestures, not likes or views.",
+                "السرعة المحددة: حتى 15 نقرة/ثانية. السرعة الفعلية تعتمد على الهاتف وأندرويد. العداد يحسب النقرات المنفذة، وليس الإعجابات أو المشاهدات.")
+            textSize = 13f; setTextColor(muted); setPadding(0, dp(14), 0, 0)
+        }, wrap())
     }
 
         // Separate app screen: only the six requested apps appear here.
