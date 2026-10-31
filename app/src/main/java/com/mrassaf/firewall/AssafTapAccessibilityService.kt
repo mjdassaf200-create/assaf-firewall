@@ -14,12 +14,6 @@ class AssafTapAccessibilityService : AccessibilityService() {
     private val tapTask = object : Runnable {
         override fun run() {
             if (!tapping) return
-            val activePackage = rootInActiveWindow?.packageName?.toString().orEmpty()
-            if (activePackage == "com.zhiliaoapp.musically" || activePackage == "com.ss.android.ugc.trill") {
-                stopTapping()
-                Toast.makeText(this@AssafTapAccessibilityService, "ASSAF tapper paused inside TikTok", Toast.LENGTH_LONG).show()
-                return
-            }
             val prefs = getSharedPreferences("assaf_tapper", MODE_PRIVATE)
             val x = prefs.getFloat("tap_x", resources.displayMetrics.widthPixels / 2f)
             val y = prefs.getFloat("tap_y", resources.displayMetrics.heightPixels / 2f)
