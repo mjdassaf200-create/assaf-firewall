@@ -713,70 +713,18 @@ class MainActivity : Activity() {
     }
 
     private fun buildTappingScreen() {
-        val root = pageRoot(tr("Tap helper", "مساعد النقر"))
+        val root = pageRoot(tr("ASSAF Tapper", "مساعد التكبيس"))
         root.addView(infoCard(tr(
-            "Choose a screen position and interval. Android Accessibility permission is required to perform taps. ASSAF does not read screen text or inspect screen contents, and stops when TikTok opens.",
-            "حدد مكان النقر والفاصل الزمني. يلزم إذن تسهيلات الاستخدام لتنفيذ النقرات فقط. ASSAF لا يقرأ نصوص الشاشة ولا يفحص محتواها، ويتوقف عند فتح تيك توك."
+            "Automatic tapping is temporarily unavailable in this public build while we work on a safer, Play Protect-friendly approach. ASSAF does not request Accessibility access in this version.",
+            "ميزة التكبيس التلقائي غير متاحة مؤقتًا في هذه النسخة العامة، إلى أن نجهز طريقة أكثر أمانًا ومتوافقة مع حماية Google Play. هذه النسخة لا تطلب صلاحية تسهيلات الاستخدام."
         )), wrap())
-
-        fun numberField(hintText: String, defaultValue: String): EditText = EditText(this).apply {
-            hint = hintText
-            setSingleLine(true)
-            inputType = InputType.TYPE_CLASS_NUMBER
-            setTextColor(white)
-            setHintTextColor(muted)
-            background = rounded(panel, 12)
-            setPadding(dp(14), dp(10), dp(14), dp(10))
-            setText(defaultValue)
-        }
-
-        val xInput = numberField(tr("X position (pixels)", "الموقع الأفقي X"), prefsTap().getInt("tap_x", resources.displayMetrics.widthPixels / 2).toString())
-        val yInput = numberField(tr("Y position (pixels)", "الموقع العمودي Y"), prefsTap().getInt("tap_y", resources.displayMetrics.heightPixels / 2).toString())
-        val intervalInput = numberField(tr("Interval in milliseconds (min 300)", "الفاصل بالمللي ثانية (300 كحد أدنى)"), prefsTap().getLong("tap_interval", 1000L).toString())
-
-        listOf(
-            tr("Tap X coordinate", "إحداثي النقر X") to xInput,
-            tr("Tap Y coordinate", "إحداثي النقر Y") to yInput,
-            tr("Tap interval", "الفاصل الزمني") to intervalInput
-        ).forEach { (label, field) ->
-            root.addView(TextView(this).apply {
-                text = label; textSize = 12f; setTextColor(muted); setPadding(0, dp(12), 0, dp(5))
-            }, wrap())
-            root.addView(field, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
-        }
-
-        root.addView(primaryButton(tr("Enable tap helper", "تفعيل مساعد النقر")).apply {
-            setOnClickListener {
-                val x = xInput.text.toString().toIntOrNull()
-                val y = yInput.text.toString().toIntOrNull()
-                val interval = intervalInput.text.toString().toLongOrNull()
-                if (x == null || y == null || interval == null || interval < 300L) {
-                    Toast.makeText(this@MainActivity, tr("Enter valid coordinates and an interval of at least 300 ms", "أدخل إحداثيات صحيحة وفاصلًا لا يقل عن 300 مللي ثانية"), Toast.LENGTH_LONG).show()
-                    return@setOnClickListener
-                }
-                prefsTap().edit().putInt("tap_x", x).putInt("tap_y", y)
-                    .putLong("tap_interval", interval.coerceAtMost(10000L))
-                    .putBoolean("enabled", true).apply()
-                startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(16) })
-
-        root.addView(smallButton().apply {
-            text = tr("Stop tap helper", "إيقاف مساعد النقر")
-            setOnClickListener {
-                prefsTap().edit().putBoolean("enabled", false).apply()
-                Toast.makeText(this@MainActivity, tr("Tap helper stopped", "تم إيقاف مساعد النقر"), Toast.LENGTH_SHORT).show()
-            }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
-
         root.addView(primaryButton(tr("Open TikTok", "فتح تيك توك")).apply {
             setOnClickListener {
                 val launch = packageManager.getLaunchIntentForPackage("com.zhiliaoapp.musically") ?: packageManager.getLaunchIntentForPackage("com.ss.android.ugc.trill")
                 if (launch != null) startActivity(launch) else Toast.makeText(this@MainActivity, tr("TikTok is not installed", "تيك توك غير مثبت"), Toast.LENGTH_LONG).show()
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(10) })
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(14) })
     }
-
     private fun prefsTap() = getSharedPreferences("assaf_tapper", MODE_PRIVATE)
 
         // Separate app screen: only the six requested apps appear here.
