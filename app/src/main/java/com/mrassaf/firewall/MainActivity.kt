@@ -717,7 +717,8 @@ class MainActivity : Activity() {
         val tapPrefs = getSharedPreferences("assaf_manual_tapper", MODE_PRIVATE)
         var taps = tapPrefs.getInt("count", 0)
         var running = false
-        var startedAt = 0L
+        val autoHandler = Handler(Looper.getMainLooper())
+        lateinit var autoTask: Runnable
         val countView = TextView(this).apply {
             text = taps.toString()
             textSize = 42f
@@ -734,8 +735,8 @@ class MainActivity : Activity() {
             setPadding(0, 0, 0, dp(12))
         }
         root.addView(infoCard(tr(
-            "Move the ASSAF tap button anywhere inside this screen and tap it to count your own actions. It does not tap inside TikTok or create automatic likes. No Accessibility permission is needed.",
-            "حرّك زر التكبيس داخل هذه الشاشة إلى المكان الذي تريده واضغط عليه لعدّ نقراتك بنفسك. الزر لا ينقر داخل تيك توك ولا ينشئ إعجابات تلقائية، ولا يحتاج صلاحية تسهيلات الاستخدام."
+            "This demo repeats a counter inside ASSAF only. It does not send touches to TikTok or other apps and does not create likes. Start and stop it here; no Accessibility permission is needed.",
+            "هذه الأداة تكرّر العدّ داخل ASSAF فقط. لا ترسل نقرات إلى تيك توك أو التطبيقات الأخرى ولا تنشئ إعجابات. ابدأ وأوقفها من هنا؛ ولا تحتاج صلاحية تسهيلات الاستخدام."
         )), wrap())
         root.addView(countView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(stateView, wrap())
@@ -799,14 +800,8 @@ class MainActivity : Activity() {
                     true
                 }
                 android.view.MotionEvent.ACTION_UP -> {
-                    if (!dragged) {
-                        if (running) {
-                            taps += 1
-                            tapPrefs.edit().putInt("count", taps).apply()
-                            countView.text = taps.toString()
-                        } else {
-                            Toast.makeText(this, tr("Start the session first", "ابدأ الجلسة أولًا"), Toast.LENGTH_SHORT).show()
-                        }
+                    if (!dragged && !running) {
+                        Toast.makeText(this, tr("Use START to run the counter", "اضغط ابدأ لتشغيل العداد"), Toast.LENGTH_SHORT).show()
                     }
                     view.performClick()
                     true
@@ -817,28 +812,42 @@ class MainActivity : Activity() {
         }
         tapTarget.setOnClickListener { /* Tap counting is handled on touch-up after drag detection. */ }
 
-        val startButton = smallButton().apply {
-            text = tr("Start session", "بدء الجلسة")
-            setOnClickListener {
-                running = true
-                startedAt = android.os.SystemClock.elapsedRealtime()
-                stateView.text = tr("Session running — move and tap the blue button", "الجلسة تعمل — حرّك الزر الأزرق واضغطه")
-                isEnabled = false
+        autoTask = object : Runnable {
+            override fun run() {
+                if (!running || isFinishing) return
+                taps += 1
+                tapPrefs.edit().putInt("count", taps).apply()
+                countView.text = taps.toString()
+                autoHandler.postDelayed(this, 1000L)
             }
         }
-        root.addView(startButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
-        root.addView(smallButton().apply {
-            text = tr("Stop and reset session", "إيقاف وتصفير الجلسة")
+        val startButton = primaryButton(tr("START AUTO COUNTER", "ابدأ العد التلقائي")).apply {
+            setOnClickListener {
+                if (!running) {
+                    running = true
+                    stateView.text = tr("Auto counter running inside ASSAF", "العد التلقائي يعمل داخل ASSAF")
+                    isEnabled = false
+                    autoHandler.postDelayed(autoTask, 1000L)
+                }
+            }
+        }
+        root.addView(startButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
+        root.addView(primaryButton(tr("STOP", "إيقاف")).apply {
             setOnClickListener {
                 running = false
+                autoHandler.removeCallbacks(autoTask)
+                stateView.text = tr("Stopped", "متوقف")
+                startButton.isEnabled = true
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(8) })
+        root.addView(smallButton().apply {
+            text = tr("Reset counter", "تصفير العداد")
+            setOnClickListener {
                 taps = 0
                 tapPrefs.edit().putInt("count", 0).apply()
                 countView.text = "0"
-                stateView.text = tr("Session stopped", "تم إيقاف الجلسة")
-                startedAt = 0L
-                startButton.isEnabled = true
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) })
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(8) })
         root.addView(primaryButton(tr("Open TikTok", "فتح تيك توك")).apply {
             setOnClickListener {
                 val launch = packageManager.getLaunchIntentForPackage("com.zhiliaoapp.musically")
