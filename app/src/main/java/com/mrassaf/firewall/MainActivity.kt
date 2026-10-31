@@ -717,57 +717,46 @@ class MainActivity : Activity() {
     private fun buildTappingScreen() {
         val root = pageRoot(tr("ASSAF TikTok Tapper", "مساعد تكبيس تيك توك"))
         root.addView(infoCard(tr(
-            "This tool sends real screen taps using Android Accessibility. Enable the ASSAF tap service and overlay permission, open TikTok, drag the floating target onto the exact place you want to tap, then press START. Use only where automated tapping is allowed.",
-            "هذه الأداة ترسل نقرات فعلية للشاشة عبر تسهيلات الاستخدام في أندرويد. فعّل خدمة التكبيس العائمة وصلاحية الظهور فوق التطبيقات، ثم افتح تيك توك واسحب مؤشر الهدف إلى المكان المطلوب واضغط ابدأ. استخدمها فقط حيث يُسمح بالتكبيس الآلي."
+            "Real screen taps use Android Accessibility. Enable the ASSAF service and overlay permission, show the floating target, open TikTok, drag the target to the desired position, then press START.",
+            "التكبيس الفعلي يتم عبر تسهيلات الاستخدام في أندرويد. فعّل خدمة ASSAF وصلاحية الظهور فوق التطبيقات، أظهر الهدف العائم، افتح تيك توك، اسحب الهدف إلى المكان المطلوب ثم اضغط ابدأ."
         )), wrap())
-
-        val serviceStatus = infoCard("")
+        val status = infoCard("")
         fun refreshStatus() {
-            val accessibilityOn = AssafTapAccessibilityService.isEnabled(this)
-            val overlayOn = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
-            serviceStatus.text = tr(
-                "Accessibility: " + if (accessibilityOn) "Enabled" else "Not enabled" + "\nOverlay permission: " + if (overlayOn) "Granted" else "Required",
-                "تسهيلات الاستخدام: " + if (accessibilityOn) "مفعّلة" else "غير مفعّلة" + "\nصلاحية الظهور فوق التطبيقات: " + if (overlayOn) "ممنوحة" else "مطلوبة"
+            val access = AssafTapAccessibilityService.isEnabled(this)
+            val overlay = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+            status.text = tr(
+                "Accessibility: " + (if (access) "Enabled" else "Not enabled") + "\nOverlay: " + (if (overlay) "Allowed" else "Required"),
+                "تسهيلات الاستخدام: " + (if (access) "مفعّلة" else "غير مفعّلة") + "\nالظهور فوق التطبيقات: " + (if (overlay) "مسموح" else "مطلوب")
             )
         }
         refreshStatus()
-        root.addView(serviceStatus, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
-
-        root.addView(primaryButton(tr("1. Enable tap accessibility", "1. تفعيل صلاحية التكبيس")).apply {
+        root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
+        root.addView(primaryButton(tr("1. Enable ASSAF tap service", "1. تفعيل خدمة تكبيس ASSAF")).apply {
+            setOnClickListener { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { bottomMargin = dp(8) })
+        root.addView(primaryButton(tr("2. Allow floating window", "2. السماح بالزر العائم")).apply {
             setOnClickListener {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                Toast.makeText(this@MainActivity, tr("Find ASSAF Tap Service and turn it on, then return here.", "ابحث عن خدمة تكبيس ASSAF وفعّلها ثم ارجع إلى هنا."), Toast.LENGTH_LONG).show()
-            }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { bottomMargin = dp(8) })
-
-        root.addView(primaryButton(tr("2. Allow display over other apps", "2. السماح بالظهور فوق التطبيقات")).apply {
-            setOnClickListener {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this@MainActivity)) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this@MainActivity))
                     startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-                } else {
-                    Toast.makeText(this@MainActivity, tr("Overlay permission is already allowed.", "صلاحية الظهور فوق التطبيقات مفعّلة بالفعل."), Toast.LENGTH_SHORT).show()
-                }
+                else Toast.makeText(this@MainActivity, tr("Permission already allowed", "الصلاحية مفعّلة بالفعل"), Toast.LENGTH_SHORT).show()
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { bottomMargin = dp(8) })
-
-        root.addView(primaryButton(tr("3. Show floating target and controls", "3. إظهار مؤشر الهدف وأزرار التحكم")).apply {
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { bottomMargin = dp(8) })
+        root.addView(primaryButton(tr("3. Show floating tap controls", "3. إظهار أزرار التكبيس العائمة")).apply {
             setOnClickListener {
                 refreshStatus()
                 if (!AssafTapAccessibilityService.isEnabled(this@MainActivity)) {
-                    Toast.makeText(this@MainActivity, tr("Enable ASSAF Tap Service first.", "فعّل خدمة تكبيس ASSAF أولاً."), Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, tr("Enable the ASSAF accessibility service first", "فعّل خدمة تسهيلات الاستخدام أولاً"), Toast.LENGTH_LONG).show()
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this@MainActivity)) {
-                    Toast.makeText(this@MainActivity, tr("Allow overlay permission first.", "اسمح بصلاحية الظهور فوق التطبيقات أولاً."), Toast.LENGTH_LONG).show()
                     startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
                 } else {
                     startService(Intent(this@MainActivity, AssafFloatingCounterService::class.java))
-                    Toast.makeText(this@MainActivity, tr("Floating target ready. Open TikTok and drag the blue target onto the desired point.", "مؤشر التكبيس جاهز. افتح تيك توك واسحب الهدف الأزرق إلى المكان المطلوب."), Toast.LENGTH_LONG).show()
                 }
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
-
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
         root.addView(TextView(this).apply {
-            text = tr("Fixed speed: up to 15 taps/second. Actual speed depends on the phone and Android. The counter shows completed tap gestures, not likes or views.",
-                "السرعة المحددة: حتى 15 نقرة/ثانية. السرعة الفعلية تعتمد على الهاتف وأندرويد. العداد يحسب النقرات المنفذة، وليس الإعجابات أو المشاهدات.")
+            text = tr("Target speed: up to 15 taps/second. Actual speed depends on the phone. The counter increases only after Android reports a completed tap gesture.",
+                "السرعة المستهدفة: حتى 15 نقرة/ثانية. السرعة الفعلية تعتمد على الهاتف. العداد يزيد فقط بعد تأكيد أندرويد تنفيذ النقرة.")
             textSize = 13f; setTextColor(muted); setPadding(0, dp(14), 0, 0)
         }, wrap())
     }
