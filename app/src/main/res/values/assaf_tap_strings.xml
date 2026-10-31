@@ -1,3 +1,0 @@
-<resources>
-    <string name="assaf_tap_service_description">ASSAF Tap Helper: performs repeated taps only after you turn it on. It does not read screen text or inspect screen contents. It stops when TikTok opens.</string>
-</resources>
