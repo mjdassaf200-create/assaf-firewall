@@ -39,10 +39,17 @@ class AssafTapAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null) return
-        val pkg = event.packageName?.toString().orEmpty()
-        if (pkg == "com.zhiliaoapp.musically" || pkg == "com.ss.android.ugc.trill") stopTapping()
-        else if (getSharedPreferences("assaf_tapper", MODE_PRIVATE).getBoolean("enabled", false)) startTapping()
+        val prefs = getSharedPreferences("assaf_tapper", MODE_PRIVATE)
+        if (!prefs.getBoolean("enabled", false)) {
+            stopTapping()
+            return
+        }
+        val pkg = event?.packageName?.toString().orEmpty()
+        if (pkg == "com.zhiliaoapp.musically" || pkg == "com.ss.android.ugc.trill") {
+            stopTapping()
+        } else {
+            startTapping()
+        }
     }
 
     override fun onInterrupt() = stopTapping()
