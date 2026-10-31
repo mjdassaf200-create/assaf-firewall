@@ -1,0 +1,3 @@
+<resources>
+    <string name="assaf_tap_service_description">ASSAF tap helper. Taps only at the location and interval selected by you, and automatically stops in TikTok.</string>
+</resources>
