@@ -207,7 +207,7 @@ class MainActivity : Activity() {
         val scroll = ScrollView(this).apply { setFillViewport(true); setBackgroundColor(navy); isVerticalScrollBarEnabled = false }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(24))
+            setPadding(dp(18), dp(48), dp(18), dp(24))
             setBackgroundResource(R.drawable.assaf_background)
             layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
