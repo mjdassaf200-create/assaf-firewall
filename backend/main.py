@@ -60,6 +60,17 @@ class SupportMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
 
+
+
+class SupportReply(Base):
+    __tablename__ = "support_replies"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    message_id: Mapped[str] = mapped_column(ForeignKey("support_messages.id", ondelete="CASCADE"), index=True)
+    sender: Mapped[str] = mapped_column(String(10))  # user or owner
+    message: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+
 class AppSetting(Base):
     __tablename__ = "app_settings"
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
@@ -149,6 +160,10 @@ class SupportMessageInput(BaseModel):
 class BanRequest(BaseModel):
     banned: bool
     reason: str | None = Field(default=None, max_length=500)
+
+
+class SupportReplyInput(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
 
 
 class SupportDecision(BaseModel):
@@ -435,6 +450,54 @@ def owner_support(_owner: dict = Depends(current_owner), db: Session = Depends(g
         user = db.get(User, row.user_id) if row.user_id else None
         result.append({"id": row.id, "user_id": row.user_id, "email": user.email if user else None, "category": row.category, "message": row.message, "status": row.status, "admin_note": row.admin_note, "created_at": row.created_at.isoformat()})
     return result
+
+
+
+
+@app.get("/v1/support/messages", tags=["support"])
+def user_support_messages(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    rows = db.scalars(select(SupportMessage).where(SupportMessage.user_id == user.id).order_by(SupportMessage.created_at.desc()).limit(100))
+    result = []
+    for row in rows:
+        replies = db.scalars(select(SupportReply).where(SupportReply.message_id == row.id).order_by(SupportReply.created_at.asc()))
+        result.append({"id": row.id, "category": row.category, "message": row.message, "status": row.status, "created_at": row.created_at.isoformat(), "replies": [{"id": x.id, "sender": x.sender, "message": x.message, "created_at": x.created_at.isoformat()} for x in replies]})
+    return result
+
+
+@app.post("/v1/support/{message_id}/replies", status_code=201, tags=["support"])
+def user_support_reply(message_id: str, body: SupportReplyInput, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = db.get(SupportMessage, message_id)
+    if row is None or row.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    reply = SupportReply(message_id=row.id, sender="user", message=body.message.strip())
+    db.add(reply)
+    row.status = "new"
+    db.commit()
+    db.refresh(reply)
+    return {"id": reply.id, "sender": reply.sender, "message": reply.message, "created_at": reply.created_at.isoformat()}
+
+
+@app.get("/v1/admin/support/{message_id}/replies", tags=["owner"])
+def owner_support_replies(message_id: str, _owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    row = db.get(SupportMessage, message_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    replies = db.scalars(select(SupportReply).where(SupportReply.message_id == message_id).order_by(SupportReply.created_at.asc()))
+    return [{"id": x.id, "sender": x.sender, "message": x.message, "created_at": x.created_at.isoformat()} for x in replies]
+
+
+@app.post("/v1/admin/support/{message_id}/replies", status_code=201, tags=["owner"])
+def owner_support_reply(message_id: str, body: SupportReplyInput, _owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    row = db.get(SupportMessage, message_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    reply = SupportReply(message_id=row.id, sender="owner", message=body.message.strip())
+    db.add(reply)
+    row.status = "answered"
+    row.admin_note = None
+    db.commit()
+    db.refresh(reply)
+    return {"id": reply.id, "sender": reply.sender, "message": reply.message, "created_at": reply.created_at.isoformat()}
 
 
 @app.patch("/v1/admin/support/{message_id}", tags=["owner"])
