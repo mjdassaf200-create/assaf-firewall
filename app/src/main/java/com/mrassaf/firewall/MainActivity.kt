@@ -1170,7 +1170,14 @@ class MainActivity : Activity() {
                     contentDescription = if (isFavorite) tr("Remove from favorites", "إزالة من المفضلة") else tr("Add to favorites", "أضف إلى المفضلة")
                     setOnClickListener {
                         val updated = prefs.getStringSet(KEY_FAVORITE_APPS, emptySet()).orEmpty().toMutableSet()
-                        if (!updated.add(pkg)) updated.remove(pkg)
+                        if (pkg in updated) {
+                            updated.remove(pkg)
+                        } else if (updated.size < 4) {
+                            updated.add(pkg)
+                        } else {
+                            Toast.makeText(this@MainActivity, tr("You can add up to 4 favorite apps", "المفضلة تستوعب 4 تطبيقات فقط"), Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
                         prefs.edit().putStringSet(KEY_FAVORITE_APPS, updated).apply()
                         loadApps()
                     }
@@ -1214,10 +1221,58 @@ class MainActivity : Activity() {
             }
         }
 
-        if (favoriteApps.isNotEmpty()) {
-            addHeading(tr("FAVORITES", "المفضلة ★"))
-            renderApps(favoriteApps)
+        addHeading(tr("FAVORITES • 4 SLOTS", "المفضلة • 4 خانات ★"))
+        val slotsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
+        repeat(4) { slotIndex ->
+            val favorite = favoriteApps.getOrNull(slotIndex)
+            val slot = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(3), dp(8), dp(3), dp(8))
+                background = rounded(panel, 12)
+            }
+            if (favorite == null) {
+                slot.addView(TextView(this).apply {
+                    text = "+"
+                    textSize = 24f
+                    gravity = Gravity.CENTER
+                    setTextColor(muted)
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)))
+                slot.addView(TextView(this).apply {
+                    text = tr("Add app", "أضف تطبيق")
+                    textSize = 10f
+                    gravity = Gravity.CENTER
+                    setTextColor(muted)
+                }, wrap())
+            } else {
+                val info = favorite.first
+                val pkg = favorite.third
+                slot.addView(ImageView(this).apply {
+                    setImageDrawable(runCatching { packageManager.getApplicationIcon(info) }.getOrNull())
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                }, LinearLayout.LayoutParams(dp(38), dp(38)))
+                slot.addView(TextView(this).apply {
+                    text = favorite.second
+                    textSize = 10f
+                    gravity = Gravity.CENTER
+                    setTextColor(white)
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(22)))
+                slot.setOnClickListener { confirmAppConnection(pkg, favorite.second) }
+            }
+            slotsRow.addView(slot, LinearLayout.LayoutParams(0, dp(76), 1f).apply {
+                marginStart = dp(3)
+                marginEnd = dp(3)
+            })
+        }
+        listContainer.addView(slotsRow, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(8) })
         addHeading(tr("ALL APPLICATIONS", "كل التطبيقات"))
         renderApps(otherApps)
 
