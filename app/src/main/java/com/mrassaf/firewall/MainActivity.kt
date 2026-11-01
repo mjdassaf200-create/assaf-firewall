@@ -189,7 +189,6 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         activityResumed = false
-        appOpenShownThisLaunch = false
         telemetryHandler.removeCallbacks(telemetryTask)
         telemetryHandler.removeCallbacks(banCheckTask)
         super.onPause()
