@@ -28,6 +28,12 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.FullScreenContentCallback
+import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
+import com.google.android.gms.ads.appopen.AppOpenAd
+import com.google.android.gms.ads.appopen.AppOpenAdLoadCallback
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.MobileAds
@@ -48,6 +54,12 @@ class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences(FirewallVpnService.PREFS, MODE_PRIVATE) }
     private var pendingStart = false
     private var currentScreen = "home"
+    private var appOpenAd: AppOpenAd? = null
+    private var interstitialAd: InterstitialAd? = null
+    private var activityResumed = false
+    private var appOpenShowing = false
+    private var interstitialShowing = false
+    private var appOpenShownThisLaunch = false
     private var accountBanned = false
     private var banReason = ""
     private var banCheckRunning = false
@@ -103,7 +115,12 @@ class MainActivity : Activity() {
         startMinute = prefs.getInt(KEY_START_MINUTE, 0)
         endHour = prefs.getInt(KEY_END_HOUR, 7)
         endMinute = prefs.getInt(KEY_END_MINUTE, 0)
-        MobileAds.initialize(this) { }
+        MobileAds.initialize(this) {
+            runOnUiThread {
+                loadAppOpenAd()
+                loadInterstitialAd()
+            }
+        }
         buildUi()
         if (currentScreen == "apps") loadApps()
         if (!telemetryPrefs.getBoolean("choice_made", false)) showTelemetryConsent()
@@ -130,6 +147,8 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        activityResumed = true
+        if (appOpenAd != null && !appOpenShownThisLaunch) showAppOpenAd()
         telemetryHandler.removeCallbacks(telemetryTask)
         if (telemetryPrefs.getBoolean("enabled", false) && !accountBanned) telemetryHandler.post(telemetryTask)
         if (prefs.getString(KEY_API_TOKEN, null) != null) {
@@ -169,6 +188,8 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        activityResumed = false
+        appOpenShownThisLaunch = false
         telemetryHandler.removeCallbacks(telemetryTask)
         telemetryHandler.removeCallbacks(banCheckTask)
         super.onPause()
@@ -206,8 +227,88 @@ class MainActivity : Activity() {
     }
 
     private fun goTo(screen: String) {
-        currentScreen = if (accountBanned && screen !in setOf("banned", "contact", "appeal")) "banned" else screen
+        val destination = if (accountBanned && screen !in setOf("banned", "contact", "appeal")) "banned" else screen
+        val returningHome = currentScreen != "home" && destination == "home" && !accountBanned
+        if (returningHome && interstitialAd != null && !interstitialShowing) {
+            showInterstitialThenNavigate()
+            return
+        }
+        currentScreen = destination
         buildUi()
+    }
+
+    private fun loadAppOpenAd() {
+        if (appOpenAd != null || isFinishing) return
+        AppOpenAd.load(
+            this,
+            "ca-app-pub-6000977044744613/8824657940",
+            AdRequest.Builder().build(),
+            object : AppOpenAdLoadCallback() {
+                override fun onAdLoaded(ad: AppOpenAd) {
+                    appOpenAd = ad
+                    if (activityResumed && !appOpenShownThisLaunch) showAppOpenAd()
+                }
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    appOpenAd = null
+                }
+            }
+        )
+    }
+
+    private fun showAppOpenAd() {
+        val ad = appOpenAd ?: return
+        if (appOpenShowing || isFinishing || isDestroyed) return
+        appOpenAd = null
+        appOpenShownThisLaunch = true
+        appOpenShowing = true
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() {
+                appOpenShowing = false
+                loadAppOpenAd()
+            }
+            override fun onAdFailedToShowFullScreenContent(error: com.google.android.gms.ads.AdError) {
+                appOpenShowing = false
+                loadAppOpenAd()
+            }
+        }
+        ad.show(this)
+    }
+
+    private fun loadInterstitialAd() {
+        if (interstitialAd != null || isFinishing) return
+        InterstitialAd.load(
+            this,
+            "ca-app-pub-6000977044744613/9981826945",
+            AdRequest.Builder().build(),
+            object : InterstitialAdLoadCallback() {
+                override fun onAdLoaded(ad: InterstitialAd) {
+                    interstitialAd = ad
+                }
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    interstitialAd = null
+                }
+            }
+        )
+    }
+
+    private fun showInterstitialThenNavigate() {
+        val ad = interstitialAd ?: return
+        interstitialAd = null
+        interstitialShowing = true
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() {
+                interstitialShowing = false
+                goTo("home")
+                loadInterstitialAd()
+            }
+            override fun onAdFailedToShowFullScreenContent(error: com.google.android.gms.ads.AdError) {
+                interstitialShowing = false
+                currentScreen = "home"
+                buildUi()
+                loadInterstitialAd()
+            }
+        }
+        ad.show(this)
     }
 
     private fun pageRoot(title: String): LinearLayout {
