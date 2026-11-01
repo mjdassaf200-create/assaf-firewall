@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="assaf_tap_service_description">ASSAF sends screen taps at the position you choose when you explicitly start tapping.</string>
+</resources>
