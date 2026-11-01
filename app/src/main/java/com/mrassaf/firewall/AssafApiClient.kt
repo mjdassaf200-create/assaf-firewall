@@ -60,6 +60,12 @@ object AssafApiClient {
     fun submitAppeal(token: String, message: String): JSONObject =
         JSONObject(request("POST", "/v1/appeals", token, JSONObject().put("message", message)))
 
+    fun listSupportMessages(token: String): JSONArray =
+        JSONArray(request("GET", "/v1/support/messages", token))
+
+    fun replyToSupport(token: String, messageId: String, message: String): JSONObject =
+        JSONObject(request("POST", "/v1/support/$messageId/replies", token, JSONObject().put("message", message)))
+
     fun pingTelemetry(installId: String, appVersion: String) {
         request("POST", "/v1/telemetry/ping", body = JSONObject()
             .put("install_id", installId)
