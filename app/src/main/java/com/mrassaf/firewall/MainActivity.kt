@@ -1109,9 +1109,8 @@ class MainActivity : Activity() {
         listContainer.removeAllViews()
         appRows.clear()
         val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
+        val favorites = prefs.getStringSet(KEY_FAVORITE_APPS, emptySet()).orEmpty().toSet()
 
-        // Discover every installed app that has a launcher activity. The approved
-        // home artwork is untouched; only the contents of the Apps screen are dynamic.
         val installedApps = packageManager.getInstalledApplications(0)
             .filter { it.packageName != packageName && packageManager.getLaunchIntentForPackage(it.packageName) != null }
             .map { info ->
@@ -1121,70 +1120,106 @@ class MainActivity : Activity() {
             }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.second })
 
-        var tileRow: LinearLayout? = null
-        installedApps.forEachIndexed { index, item ->
-            val info = item.first
-            val label = item.second
-            val pkg = item.third
+        val favoriteApps = installedApps.filter { it.third in favorites }
+        val otherApps = installedApps.filter { it.third !in favorites }
 
-            if (index % 3 == 0) {
-                tileRow = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.TOP
-                    layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
-                }
-                listContainer.addView(tileRow, LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { bottomMargin = dp(9) })
-            }
-
-            val isBlocked = selected.contains(pkg)
-            val tile = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(6), dp(12), dp(6), dp(10))
-                background = rounded(if (isBlocked) Color.rgb(55, 34, 49) else panel, 16)
-                isClickable = true
-                isFocusable = true
-                contentDescription = label
-            }
-
-            val iconView = ImageView(this).apply {
-                val drawable = runCatching { packageManager.getApplicationIcon(info) }.getOrNull()
-                if (drawable != null) setImageDrawable(drawable)
-                else setImageDrawable(GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(blue)
-                })
-                scaleType = ImageView.ScaleType.FIT_CENTER
-            }
-            tile.addView(iconView, LinearLayout.LayoutParams(dp(52), dp(52)))
-            tile.addView(TextView(this).apply {
-                text = label
-                textSize = 12f
+        fun addHeading(title: String) {
+            listContainer.addView(TextView(this).apply {
+                text = title
+                textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-                setTextColor(white)
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                setPadding(0, dp(7), 0, dp(4))
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)))
-            tile.addView(TextView(this).apply {
-                text = if (isBlocked) tr("BLOCKED", "محجوب") else tr("ALLOWED", "مسموح")
-                textSize = 9f
-                typeface = Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-                setTextColor(if (isBlocked) Color.rgb(255, 153, 153) else green)
+                setTextColor(blue)
+                setPadding(dp(4), dp(10), dp(4), dp(10))
             }, wrap())
-
-            tile.setOnClickListener { confirmAppConnection(pkg, label) }
-            val tileParams = LinearLayout.LayoutParams(0, dp(126), 1f).apply {
-                marginStart = dp(4)
-                marginEnd = dp(4)
-            }
-            tileRow?.addView(tile, tileParams)
-            appRows.add(pkg to tile)
         }
+
+        fun renderApps(apps: List<Triple<android.content.pm.ApplicationInfo, String, String>>) {
+            apps.forEachIndexed { index, item ->
+                val info = item.first
+                val label = item.second
+                val pkg = item.third
+                val tileRow = if (index % 3 == 0) {
+                    LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.TOP
+                        layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+                    }.also { row ->
+                        listContainer.addView(row, LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                        ).apply { bottomMargin = dp(9) })
+                    }
+                } else listContainer.getChildAt(listContainer.childCount - 1) as? LinearLayout
+
+                val isBlocked = selected.contains(pkg)
+                val isFavorite = pkg in favorites
+                val tile = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    setPadding(dp(6), dp(8), dp(6), dp(8))
+                    background = rounded(if (isBlocked) Color.rgb(55, 34, 49) else panel, 16)
+                    isClickable = true
+                    isFocusable = true
+                    contentDescription = label
+                }
+
+                val favoriteButton = TextView(this).apply {
+                    text = if (isFavorite) "★" else "☆"
+                    textSize = 22f
+                    gravity = Gravity.CENTER
+                    setTextColor(if (isFavorite) Color.rgb(255, 205, 75) else muted)
+                    contentDescription = if (isFavorite) tr("Remove from favorites", "إزالة من المفضلة") else tr("Add to favorites", "أضف إلى المفضلة")
+                    setOnClickListener {
+                        val updated = prefs.getStringSet(KEY_FAVORITE_APPS, emptySet()).orEmpty().toMutableSet()
+                        if (!updated.add(pkg)) updated.remove(pkg)
+                        prefs.edit().putStringSet(KEY_FAVORITE_APPS, updated).apply()
+                        loadApps()
+                    }
+                }
+                tile.addView(favoriteButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(27)))
+
+                val iconView = ImageView(this).apply {
+                    val drawable = runCatching { packageManager.getApplicationIcon(info) }.getOrNull()
+                    if (drawable != null) setImageDrawable(drawable)
+                    else setImageDrawable(GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(blue)
+                    })
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                }
+                tile.addView(iconView, LinearLayout.LayoutParams(dp(46), dp(46)))
+                tile.addView(TextView(this).apply {
+                    text = label
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = Gravity.CENTER
+                    setTextColor(white)
+                    maxLines = 2
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    setPadding(0, dp(5), 0, dp(3))
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
+                tile.addView(TextView(this).apply {
+                    text = if (isBlocked) tr("BLOCKED", "محجوب") else tr("ALLOWED", "مسموح")
+                    textSize = 9f
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = Gravity.CENTER
+                    setTextColor(if (isBlocked) Color.rgb(255, 153, 153) else green)
+                }, wrap())
+
+                tile.setOnClickListener { confirmAppConnection(pkg, label) }
+                tileRow?.addView(tile, LinearLayout.LayoutParams(0, dp(144), 1f).apply {
+                    marginStart = dp(4)
+                    marginEnd = dp(4)
+                })
+                appRows.add(pkg to tile)
+            }
+        }
+
+        if (favoriteApps.isNotEmpty()) {
+            addHeading(tr("FAVORITES", "المفضلة ★"))
+            renderApps(favoriteApps)
+        }
+        addHeading(tr("ALL APPLICATIONS", "كل التطبيقات"))
+        renderApps(otherApps)
 
         if (installedApps.isEmpty()) {
             listContainer.addView(TextView(this).apply {
@@ -1197,14 +1232,14 @@ class MainActivity : Activity() {
         }
 
         countText.text = tr(
-            "${installedApps.size} apps found • ${selected.size} selected",
-            "التطبيقات الموجودة: ${installedApps.size} • المحددة للحجب: ${selected.size}"
+            "${installedApps.size} apps found • ${favoriteApps.size} favorites • ${selected.size} selected",
+            "التطبيقات: ${installedApps.size} • المفضلة: ${favoriteApps.size} • المحددة للحجب: ${selected.size}"
         )
         val firewallActive = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
         statusText.text = if (firewallActive) {
-            tr("${selected.size} apps selected • Protection is active", "التطبيقات المحددة: ${selected.size} • الحماية تعمل")
+            tr("${selected.size} apps selected • Protection is active", "${selected.size} تطبيقات محددة • الحماية تعمل")
         } else {
-            tr("${selected.size} apps selected. Apply to start protection.", "التطبيقات المحددة: ${selected.size}. اضغط تطبيق لبدء الحماية.")
+            tr("${selected.size} apps selected. Apply to start protection.", "${selected.size} تطبيقات محددة. اضغط تطبيق لبدء الحماية.")
         }
     }
 
@@ -1371,6 +1406,7 @@ ${formatBytes(blockedBytes)}  •  ${packets} حزمة
         private const val KEY_START_MINUTE = "schedule_start_minute"
         private const val KEY_END_HOUR = "schedule_end_hour"
         private const val KEY_END_MINUTE = "schedule_end_minute"
+        private const val KEY_FAVORITE_APPS = "favorite_apps"
     }
 }
 
