@@ -1,14 +1,21 @@
 package com.mrassaf.firewall
 
 import android.accessibilityservice.AccessibilityService
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 
 class MyAccessibilityService : AccessibilityService() {
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Events are not collected or transmitted.
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val packageName = event.packageName?.toString()
+            if (!packageName.isNullOrBlank()) {
+                Log.d("ParentControl", "Opened App: $packageName")
+            }
+        }
     }
 
     override fun onInterrupt() {
-        // No active gesture to interrupt.
+        Log.d("ParentControl", "Accessibility Service Interrupted")
     }
 }
