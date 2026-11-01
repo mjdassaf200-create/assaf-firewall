@@ -27,6 +27,10 @@ import android.widget.FrameLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.MobileAds
 import android.text.InputType
 import java.util.Locale
 import java.util.UUID
@@ -99,6 +103,7 @@ class MainActivity : Activity() {
         startMinute = prefs.getInt(KEY_START_MINUTE, 0)
         endHour = prefs.getInt(KEY_END_HOUR, 7)
         endMinute = prefs.getInt(KEY_END_MINUTE, 0)
+        MobileAds.initialize(this) { }
         buildUi()
         if (currentScreen == "apps") loadApps()
         if (!telemetryPrefs.getBoolean("choice_made", false)) showTelemetryConsent()
@@ -222,8 +227,25 @@ class MainActivity : Activity() {
             text = title; textSize = 22f; typeface = Typeface.DEFAULT_BOLD
             setTextColor(white); gravity = Gravity.CENTER; setPadding(0, dp(20), 0, dp(20))
         }, wrap())
+        addBannerAd(root)
         setContentView(scroll)
         return root
+    }
+
+    private fun addBannerAd(parent: LinearLayout) {
+        val adView = AdView(this).apply {
+            adUnitId = "ca-app-pub-3940256099942544/6300978111"
+            val widthDp = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 36).coerceAtLeast(320)
+            setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this@MainActivity, widthDp))
+            loadAd(AdRequest.Builder().build())
+        }
+        parent.addView(adView, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(4)
+            bottomMargin = dp(12)
+        })
     }
 
     private fun infoCard(value: String): TextView = TextView(this).apply {
