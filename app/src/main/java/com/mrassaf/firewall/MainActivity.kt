@@ -820,15 +820,83 @@ class MainActivity : Activity() {
         fun tile(icon: Int?, symbol: String?, en: String, ar: String, screen: String): LinearLayout {
             val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isClickable = true; isFocusable = true; setPadding(dp(8), dp(12), dp(8), dp(12)); background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(9, 83, 157), Color.rgb(5, 29, 73))).apply { cornerRadius = dp(22).toFloat(); setStroke(dp(2), Color.rgb(30, 151, 255)) }; setOnClickListener {
                 if (screen == "tapping" && !AssafTapAccessibilityService.isEnabled(this@MainActivity)) {
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle(tr("Why does ASSAF need this permission?", "لماذا يحتاج ASSAF إلى هذه الصلاحية؟"))
-                        .setMessage(tr(
-                            "To make the TikTok tapping feature work, ASSAF needs Android Accessibility permission. This lets the tap service perform screen taps that you choose while the feature is running. Android will show an official system warning saying the service can have full control of your device. This is the standard warning for accessibility services; read it carefully and enable the service only if you trust and want to use this feature.",
-                            "حتى تعمل ميزة التكبيس على تيك توك، يحتاج ASSAF إلى صلاحية تسهيلات الاستخدام من أندرويد. تسمح هذه الصلاحية لخدمة التكبيس بتنفيذ نقرات على الشاشة تختارها أثناء تشغيل الميزة. سيعرض أندرويد رسالة نظام رسمية تفيد بأن الخدمة قد تتحكم بشكل كامل بالجهاز. هذه رسالة تحذير قياسية لخدمات تسهيلات الاستخدام؛ اقرأها جيداً وفعّل الخدمة فقط إذا كنت تثق بالتطبيق وتريد استخدام الميزة."
-                        ))
-                        .setPositiveButton(tr("Continue", "متابعة")) { _, _ -> goTo(screen) }
-                        .setNegativeButton(tr("Cancel", "إلغاء"), null)
-                        .show()
+                    val dialogContent = LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        gravity = Gravity.CENTER
+                        setPadding(dp(24), dp(26), dp(24), dp(22))
+                        background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                            intArrayOf(Color.rgb(8, 25, 55), Color.rgb(5, 53, 103))).apply {
+                            cornerRadius = dp(26).toFloat()
+                            setStroke(dp(1), Color.rgb(42, 142, 225))
+                        }
+                    }
+                    dialogContent.addView(TextView(this@MainActivity).apply {
+                        text = "🛡️"
+                        textSize = 42f
+                        gravity = Gravity.CENTER
+                    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                    dialogContent.addView(TextView(this@MainActivity).apply {
+                        text = tr("A quick note before you start", "قبل ما تبدأ…")
+                        textSize = 21f
+                        typeface = Typeface.DEFAULT_BOLD
+                        setTextColor(Color.WHITE)
+                        gravity = Gravity.CENTER
+                    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+                    dialogContent.addView(TextView(this@MainActivity).apply {
+                        text = tr("Why does ASSAF need Accessibility?", "ليش ASSAF بحاجة لصلاحية الوصول؟")
+                        textSize = 16f
+                        typeface = Typeface.DEFAULT_BOLD
+                        setTextColor(Color.rgb(116, 197, 255))
+                        gravity = Gravity.CENTER
+                    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+                    dialogContent.addView(TextView(this@MainActivity).apply {
+                        text = tr(
+                            "To run TikTok tapping, ASSAF needs Android Accessibility permission. It allows the feature to perform the taps you choose while it is running. Android will then show its own security confirmation mentioning full control of the device. This is the standard system notice for this type of service. Please read it carefully and enable the permission only if you want to use the feature.",
+                            "حتى تعمل ميزة التكبيس على تيك توك، يحتاج ASSAF إلى صلاحية الوصول (تسهيلات الاستخدام). هذه الصلاحية تسمح للميزة بتنفيذ النقرات التي تختارها أثناء تشغيلها. بعدها سيعرض أندرويد رسالة تأكيد رسمية تذكر إمكانية التحكم الكامل بالجهاز. هذه رسالة نظام قياسية لهذا النوع من الخدمات. اقرأها جيداً وفعّل الصلاحية فقط إذا كنت تريد استخدام ميزة التكبيس."
+                        )
+                        textSize = 15f
+                        setTextColor(Color.rgb(230, 239, 250))
+                        gravity = if (arabic) Gravity.RIGHT else Gravity.LEFT
+                        setLineSpacing(dp(3).toFloat(), 1f)
+                    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16) })
+                    val permissionDialog = AlertDialog.Builder(this@MainActivity).setView(dialogContent).create()
+                    val actions = LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER
+                        setPadding(0, dp(20), 0, 0)
+                    }
+                    val cancelButton = TextView(this@MainActivity).apply {
+                        text = tr("Cancel", "إلغاء")
+                        textSize = 15f
+                        gravity = Gravity.CENTER
+                        setTextColor(Color.rgb(205, 220, 238))
+                        setPadding(dp(18), dp(12), dp(18), dp(12))
+                        setOnClickListener { permissionDialog.dismiss() }
+                    }
+                    val continueButton = TextView(this@MainActivity).apply {
+                        text = tr("Continue", "متابعة")
+                        textSize = 15f
+                        typeface = Typeface.DEFAULT_BOLD
+                        gravity = Gravity.CENTER
+                        setTextColor(Color.WHITE)
+                        setPadding(dp(24), dp(12), dp(24), dp(12))
+                        background = GradientDrawable().apply {
+                            cornerRadius = dp(16).toFloat()
+                            setColor(Color.rgb(15, 116, 205))
+                            setStroke(dp(1), Color.rgb(91, 183, 255))
+                        }
+                        setOnClickListener {
+                            permissionDialog.dismiss()
+                            goTo(screen)
+                        }
+                    }
+                    actions.addView(cancelButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    actions.addView(continueButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    dialogContent.addView(actions)
+                    permissionDialog.setOnShowListener {
+                        permissionDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+                    }
+                    permissionDialog.show()                 .show()
                 } else {
                     goTo(screen)
                 }
