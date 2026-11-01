@@ -33,7 +33,6 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.appopen.AppOpenAd
-import com.google.android.gms.ads.appopen.AppOpenAdLoadCallback
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.MobileAds
@@ -242,7 +241,7 @@ class MainActivity : Activity() {
             this,
             "ca-app-pub-6000977044744613/8824657940",
             AdRequest.Builder().build(),
-            object : AppOpenAdLoadCallback() {
+            object : AppOpenAd.AppOpenAdLoadCallback() {
                 override fun onAdLoaded(ad: AppOpenAd) {
                     appOpenAd = ad
                     if (activityResumed && !appOpenShownThisLaunch) showAppOpenAd()
@@ -955,7 +954,7 @@ class MainActivity : Activity() {
                     permissionDialog.setOnShowListener {
                         permissionDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
                     }
-                    permissionDialog.show()                 .show()
+                    permissionDialog.show()
                 } else {
                     goTo(screen)
                 }
