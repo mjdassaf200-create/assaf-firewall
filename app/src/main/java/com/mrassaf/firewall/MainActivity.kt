@@ -818,7 +818,21 @@ class MainActivity : Activity() {
         root.addView(hero, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
         root.addView(TextView(this).apply { text = tr("ASSAF TOOLS", "أدوات عساف"); textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setTextColor(white); gravity = if (arabic) Gravity.RIGHT else Gravity.LEFT }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(22); bottomMargin = dp(12) })
         fun tile(icon: Int?, symbol: String?, en: String, ar: String, screen: String): LinearLayout {
-            val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isClickable = true; isFocusable = true; setPadding(dp(8), dp(12), dp(8), dp(12)); background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(9, 83, 157), Color.rgb(5, 29, 73))).apply { cornerRadius = dp(22).toFloat(); setStroke(dp(2), Color.rgb(30, 151, 255)) }; setOnClickListener { goTo(screen) } }
+            val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isClickable = true; isFocusable = true; setPadding(dp(8), dp(12), dp(8), dp(12)); background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(9, 83, 157), Color.rgb(5, 29, 73))).apply { cornerRadius = dp(22).toFloat(); setStroke(dp(2), Color.rgb(30, 151, 255)) }; setOnClickListener {
+                if (screen == "tapping" && !AssafTapAccessibilityService.isEnabled(this@MainActivity)) {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(tr("Why does ASSAF need this permission?", "لماذا يحتاج ASSAF إلى هذه الصلاحية؟"))
+                        .setMessage(tr(
+                            "To make the TikTok tapping feature work, ASSAF needs Android Accessibility permission. This lets the tap service perform screen taps that you choose while the feature is running. Android will show an official system warning saying the service can have full control of your device. This is the standard warning for accessibility services; read it carefully and enable the service only if you trust and want to use this feature.",
+                            "حتى تعمل ميزة التكبيس على تيك توك، يحتاج ASSAF إلى صلاحية تسهيلات الاستخدام من أندرويد. تسمح هذه الصلاحية لخدمة التكبيس بتنفيذ نقرات على الشاشة تختارها أثناء تشغيل الميزة. سيعرض أندرويد رسالة نظام رسمية تفيد بأن الخدمة قد تتحكم بشكل كامل بالجهاز. هذه رسالة تحذير قياسية لخدمات تسهيلات الاستخدام؛ اقرأها جيداً وفعّل الخدمة فقط إذا كنت تثق بالتطبيق وتريد استخدام الميزة."
+                        ))
+                        .setPositiveButton(tr("Continue", "متابعة")) { _, _ -> goTo(screen) }
+                        .setNegativeButton(tr("Cancel", "إلغاء"), null)
+                        .show()
+                } else {
+                    goTo(screen)
+                }
+            } }
             if (icon != null) box.addView(ImageView(this).apply { setImageResource(icon); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(62), dp(62)))
             else box.addView(TextView(this).apply { text = symbol ?: "♪"; textSize = 55f; gravity = Gravity.CENTER; setTextColor(white) }, LinearLayout.LayoutParams(dp(68), dp(68)))
             box.addView(TextView(this).apply { text = tr(en, ar); textSize = 19f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; setTextColor(white) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
