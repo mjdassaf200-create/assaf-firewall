@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="assaf_tap_accessibility_description">Allows ASSAF to perform screen taps only when you start the tapper.</string>
+</resources>
