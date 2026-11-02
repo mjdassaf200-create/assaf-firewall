@@ -57,6 +57,23 @@ object AssafApiClient {
     fun submitContact(message: String, token: String? = null): JSONObject =
         JSONObject(request("POST", "/v1/support/messages", token, JSONObject().put("message", message)))
 
+    fun listDeviceSupportMessages(deviceId: String): JSONArray =
+        JSONArray(request("GET", "/v1/device/support/messages?device_id=" + java.net.URLEncoder.encode(deviceId, "UTF-8")))
+
+    fun submitDeviceContact(deviceId: String, message: String): JSONObject =
+        JSONObject(request("POST", "/v1/device/support/messages", body = JSONObject()
+            .put("device_id", deviceId)
+            .put("message", message)))
+
+    fun replyToDeviceSupport(deviceId: String, messageId: String, message: String): JSONObject =
+        JSONObject(request("POST", "/v1/device/support/$messageId/replies", body = JSONObject()
+            .put("device_id", deviceId)
+            .put("message", message)))
+
+    fun deleteDeviceSupport(deviceId: String, messageId: String) {
+        request("DELETE", "/v1/device/support/$messageId?device_id=" + java.net.URLEncoder.encode(deviceId, "UTF-8"))
+    }
+
     fun submitAppeal(token: String, message: String): JSONObject =
         JSONObject(request("POST", "/v1/appeals", token, JSONObject().put("message", message)))
 
