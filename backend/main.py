@@ -303,8 +303,8 @@ def me(user: User = Depends(current_user)):
 
 
 @app.post("/v1/support/messages", status_code=201, tags=["support"])
-def create_support_message(body: SupportMessageInput, user: User | None = Depends(optional_user), db: Session = Depends(get_db)):
-    row = SupportMessage(user_id=user.id if user else None, category="contact", message=body.message.strip())
+def create_support_message(body: SupportMessageInput, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = SupportMessage(user_id=user.id, category="contact", message=body.message.strip())
     db.add(row)
     db.commit()
     db.refresh(row)
