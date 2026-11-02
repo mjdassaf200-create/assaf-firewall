@@ -877,14 +877,7 @@ class MainActivity : Activity() {
         root.addView(TextView(this).apply { text = tr("ASSAF TOOLS", "أدوات عساف"); textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setTextColor(white); gravity = if (arabic) Gravity.RIGHT else Gravity.LEFT }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(22); bottomMargin = dp(12) })
         fun tile(icon: Int?, symbol: String?, en: String, ar: String, screen: String): LinearLayout {
             val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isClickable = true; isFocusable = true; setPadding(dp(8), dp(12), dp(8), dp(12)); background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(9, 83, 157), Color.rgb(5, 29, 73))).apply { cornerRadius = dp(22).toFloat(); setStroke(dp(2), Color.rgb(30, 151, 255)) }; setOnClickListener {
-                if (screen == "telegram") {
-                    val telegramIntent = packageManager.getLaunchIntentForPackage("org.telegram.messenger")
-                    if (telegramIntent != null) {
-                        startActivity(telegramIntent)
-                    } else {
-                        Toast.makeText(this@MainActivity, tr("Telegram is not installed.", "تطبيق تلجرام غير مثبت على الجهاز."), Toast.LENGTH_LONG).show()
-                    }
-                } else if (screen == "tapping" && !AssafTapAccessibilityService.isEnabled(this@MainActivity)) {
+                if (screen == "tapping" && !AssafTapAccessibilityService.isEnabled(this@MainActivity)) {
                     val dialogContent = LinearLayout(this@MainActivity).apply {
                         orientation = LinearLayout.VERTICAL
                         gravity = Gravity.CENTER
@@ -973,8 +966,7 @@ class MainActivity : Activity() {
         }
         val rows = listOf(
             listOf(tile(R.drawable.ic_assaf_apps, null, "Applications", "التطبيقات", "apps"), tile(null, "♪", "TikTok tapping", "التكبيس", "tapping")),
-            listOf(tile(R.drawable.ic_assaf_link, null, "Link Check", "فحص الروابط", "link"), tile(R.drawable.ic_assaf_privacy, null, "Contact Us", "تواصل معنا", "contact")),
-            listOf(tile(R.drawable.ic_telegram, null, "Telegram", "تلجرام", "telegram"))
+            listOf(tile(R.drawable.ic_assaf_link, null, "Link Check", "فحص الروابط", "link"), tile(R.drawable.ic_assaf_privacy, null, "Contact Us", "تواصل معنا", "contact"))
         )
         rows.forEach { row ->
             val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
