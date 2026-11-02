@@ -210,6 +210,7 @@ class MainActivity : Activity() {
             "contact" -> buildContactScreen()
             "appeal" -> buildAppealScreen()
             "apps" -> { buildAppsScreen(); loadApps() }
+            "security" -> buildSecurityScreen()
             "tapping" -> buildTappingScreen()
             "stats", "privacy" -> buildStatsScreen()
             "connection" -> buildConnectionScreen()
@@ -975,7 +976,7 @@ class MainActivity : Activity() {
             return box
         }
         val rows = listOf(
-            listOf(tile(R.drawable.ic_assaf_apps, null, "Applications", "التطبيقات", "apps"), tile(null, "♪", "TikTok tapping", "التكبيس", "tapping")),
+            listOf(tile(R.drawable.ic_assaf_apps, null, "Applications", "التطبيقات", "apps"), tile(R.drawable.ic_assaf_security, null, "Security Check", "فحص الأمان", "security")),
             listOf(tile(R.drawable.ic_assaf_link, null, "Link Check", "فحص الروابط", "link"), tile(R.drawable.ic_assaf_privacy, null, "Contact Us", "تواصل معنا", "contact"))
         )
         rows.forEach { row ->
@@ -984,6 +985,77 @@ class MainActivity : Activity() {
             root.addView(line, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
         }
         setContentView(scroll)
+    }
+
+    private fun buildSecurityScreen() {
+        val root = pageRoot(tr("ASSAF Security Center", "مركز أمان ASSAF"))
+        root.addView(infoCard(tr(
+            "Review installed apps and their declared sensitive permissions. This is not a full antivirus scan and cannot prove that a device is malware-free.",
+            "مراجعة التطبيقات المثبتة والصلاحيات الحساسة التي تطلبها. هذا ليس فحص مضاد فيروسات كامل ولا يثبت خلو الهاتف من البرمجيات الضارة."
+        )), wrap())
+        val resultCard = infoCard(tr("No scan has been run yet.", "لم يتم إجراء الفحص بعد."))
+        root.addView(resultCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+        root.addView(primaryButton(tr("Scan installed apps", "افحص التطبيقات المثبتة")).apply {
+            setOnClickListener {
+                text = tr("Scanning…", "جارٍ الفحص…")
+                isEnabled = false
+                Thread {
+                    val findings = mutableListOf<String>()
+                    var scanned = 0
+                    val sensitive = setOf(
+                        "android.permission.READ_SMS", "android.permission.RECEIVE_SMS",
+                        "android.permission.SEND_SMS", "android.permission.READ_CALL_LOG",
+                        "android.permission.WRITE_CALL_LOG", "android.permission.RECORD_AUDIO",
+                        "android.permission.CAMERA", "android.permission.READ_CONTACTS",
+                        "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_BACKGROUND_LOCATION"
+                    )
+                    val apps = packageManager.getInstalledApplications(0)
+                        .filter { it.packageName != packageName && packageManager.getLaunchIntentForPackage(it.packageName) != null }
+                    for (app in apps) {
+                        scanned++
+                        val info = runCatching {
+                            @Suppress("DEPRECATION")
+                            packageManager.getPackageInfo(app.packageName, android.content.pm.PackageManager.GET_PERMISSIONS)
+                        }.getOrNull() ?: continue
+                        val requested = info.requestedPermissions.orEmpty().filter { it in sensitive }
+                        if (requested.isNotEmpty()) {
+                            val label = runCatching { packageManager.getApplicationLabel(app).toString() }.getOrDefault(app.packageName)
+                            findings.add(label + " (" + requested.size + " sensitive permissions)")
+                        }
+                    }
+                    runOnUiThread {
+                        text = tr("Scan installed apps", "افحص التطبيقات المثبتة")
+                        isEnabled = true
+                        val summary = buildString {
+                            append(tr("Apps reviewed: ", "التطبيقات التي تمت مراجعتها: ")).append(scanned)
+                            append("\n").append(tr("Apps requesting sensitive permissions: ", "تطبيقات تطلب صلاحيات حساسة: ")).append(findings.size)
+                            if (findings.isNotEmpty()) {
+                                append("\n\n").append(tr("Review these apps (permission requests are not proof of malware):", "راجع هذه التطبيقات (طلب الصلاحيات لا يعني أنها فيروسات):"))
+                                findings.take(30).forEach { append("\n• ").append(it) }
+                            }
+                            append("\n\n").append(tr("This check does not scan app code, private app data, photos, or files for malware. No virus verdict is being made.", "هذا الفحص لا يحلل كود التطبيقات أو بياناتها الخاصة أو الصور والملفات بحثاً عن الفيروسات. لم يتم إصدار حكم بوجود فيروس أو عدمه."))
+                        }
+                        resultCard.text = summary
+                    }
+                }.start()
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(12) })
+        root.addView(smallButton().apply {
+            text = tr("Open Android security settings / Play Protect", "فتح إعدادات أمان أندرويد / Play Protect")
+            setOnClickListener {
+                runCatching { startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
+                    .onFailure { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(10) })
+        root.addView(TextView(this).apply {
+            text = tr(
+                "A real malware engine, user-granted file access, and explicit Android permissions are still required for full file scanning and continuous link protection. ASSAF will not label a file or app as a virus based only on its name or permissions.",
+                "يلزم محرك كشف برمجيات ضارة حقيقي وصلاحية وصول للملفات وموافقات أندرويد الصريحة لإضافة فحص شامل للملفات وحماية مستمرة للروابط. لن يصنّف ASSAF ملفاً أو تطبيقاً كفيروس اعتماداً على اسمه أو صلاحياته فقط."
+            )
+            textSize = 12f
+            setTextColor(muted)
+            setPadding(0, dp(14), 0, 0)
+        }, wrap())
     }
 
     private fun buildTappingScreen() {
