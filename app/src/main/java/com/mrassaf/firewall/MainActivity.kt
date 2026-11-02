@@ -733,11 +733,21 @@ class MainActivity : Activity() {
             }.start()
         }
         send.setOnClickListener {
+            val token = prefs.getString(KEY_API_TOKEN, null)
+            if (token.isNullOrBlank()) {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle(tr("ASSAF account required", "يلزم تسجيل حساب ASSAF"))
+                    .setMessage(tr("Please sign in or create an account before contacting the owner. Your conversation and replies will be saved to your account.", "يرجى تسجيل الدخول أو إنشاء حساب قبل التواصل مع المالك. سيتم حفظ المحادثة والردود في حسابك."))
+                    .setPositiveButton(tr("Sign in / Create account", "تسجيل الدخول / إنشاء حساب")) { _, _ -> showAccountDialog() }
+                    .setNegativeButton(tr("Cancel", "إلغاء"), null)
+                    .show()
+                return@setOnClickListener
+            }
             val value = message.text.toString().trim()
             if (value.length < 5) { message.error = tr("Write at least 5 characters", "اكتب 5 أحرف على الأقل"); return@setOnClickListener }
             send.isEnabled = false
             Thread {
-                val result = runCatching { AssafApiClient.submitContact(value, prefs.getString(KEY_API_TOKEN, null)) }
+                val result = runCatching { AssafApiClient.submitContact(value, token) }
                 runOnUiThread {
                     send.isEnabled = true
                     result.onSuccess {
