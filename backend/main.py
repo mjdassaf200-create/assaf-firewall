@@ -53,6 +53,7 @@ class SupportMessage(Base):
     __tablename__ = "support_messages"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    device_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     category: Mapped[str] = mapped_column(String(20), default="contact")
     message: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="new", index=True)
@@ -111,6 +112,11 @@ with engine.begin() as _connection:
         _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN is_banned BOOLEAN NOT NULL DEFAULT FALSE")
     if "ban_reason" not in _user_columns:
         _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN ban_reason VARCHAR(500)")
+_support_columns = {column["name"] for column in inspect(engine).get_columns("support_messages")}
+with engine.begin() as _connection:
+    if "device_id" not in _support_columns:
+        _connection.exec_driver_sql("ALTER TABLE support_messages ADD COLUMN device_id VARCHAR(80)")
+    _connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_support_messages_device_id ON support_messages (device_id)")
 
 app = FastAPI(
     title="ASSAF API",
@@ -448,10 +454,67 @@ def owner_support(_owner: dict = Depends(current_owner), db: Session = Depends(g
     result = []
     for row in rows:
         user = db.get(User, row.user_id) if row.user_id else None
-        result.append({"id": row.id, "user_id": row.user_id, "email": user.email if user else None, "category": row.category, "message": row.message, "status": row.status, "admin_note": row.admin_note, "created_at": row.created_at.isoformat()})
+        result.append({"id": row.id, "user_id": row.user_id, "device_id": row.device_id, "email": user.email if user else None, "category": row.category, "message": row.message, "status": row.status, "admin_note": row.admin_note, "created_at": row.created_at.isoformat()})
     return result
 
 
+
+
+class DeviceSupportMessageInput(BaseModel):
+    device_id: str = Field(min_length=16, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    message: str = Field(min_length=1, max_length=4000)
+
+
+class DeviceSupportReplyInput(BaseModel):
+    device_id: str = Field(min_length=16, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    message: str = Field(min_length=1, max_length=4000)
+
+
+@app.get("/v1/device/support/messages", tags=["support"])
+def device_support_messages(device_id: str, db: Session = Depends(get_db)):
+    if not __import__("re").fullmatch(r"[A-Za-z0-9_-]{16,80}", device_id):
+        raise HTTPException(status_code=422, detail="Invalid device ID")
+    rows = db.scalars(select(SupportMessage).where(SupportMessage.device_id == device_id, SupportMessage.category == "contact").order_by(SupportMessage.created_at.desc()).limit(100))
+    result = []
+    for row in rows:
+        replies = db.scalars(select(SupportReply).where(SupportReply.message_id == row.id).order_by(SupportReply.created_at.asc()))
+        result.append({"id": row.id, "category": row.category, "message": row.message, "status": row.status, "created_at": row.created_at.isoformat(), "replies": [{"id": x.id, "sender": x.sender, "message": x.message, "created_at": x.created_at.isoformat()} for x in replies]})
+    return result
+
+
+@app.post("/v1/device/support/messages", status_code=201, tags=["support"])
+def create_device_support_message(body: DeviceSupportMessageInput, db: Session = Depends(get_db)):
+    row = SupportMessage(device_id=body.device_id, category="contact", message=body.message.strip())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "status": row.status, "created_at": row.created_at.isoformat()}
+
+
+@app.post("/v1/device/support/{message_id}/replies", status_code=201, tags=["support"])
+def device_support_reply(message_id: str, body: DeviceSupportReplyInput, db: Session = Depends(get_db)):
+    row = db.get(SupportMessage, message_id)
+    if row is None or row.device_id != body.device_id or row.category != "contact":
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    reply = SupportReply(message_id=row.id, sender="user", message=body.message.strip())
+    db.add(reply)
+    row.status = "new"
+    db.commit()
+    db.refresh(reply)
+    return {"id": reply.id, "sender": reply.sender, "message": reply.message, "created_at": reply.created_at.isoformat()}
+
+
+@app.delete("/v1/device/support/{message_id}", status_code=204, tags=["support"])
+def delete_device_support_message(message_id: str, device_id: str, db: Session = Depends(get_db)):
+    if not __import__("re").fullmatch(r"[A-Za-z0-9_-]{16,80}", device_id):
+        raise HTTPException(status_code=422, detail="Invalid device ID")
+    row = db.get(SupportMessage, message_id)
+    if row is None or row.device_id != device_id or row.category != "contact":
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    db.query(SupportReply).filter(SupportReply.message_id == message_id).delete(synchronize_session=False)
+    db.delete(row)
+    db.commit()
+    return None
 
 
 @app.get("/v1/support/messages", tags=["support"])
