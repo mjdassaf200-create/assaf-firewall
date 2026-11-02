@@ -663,44 +663,60 @@ class MainActivity : Activity() {
 
     private fun buildContactScreen() {
         val root = pageRoot(tr("Contact Us", "تواصل معنا"))
-        root.addView(infoCard(tr("Send a message to the ASSAF administration.", "أرسل رسالة إلى إدارة ASSAF.")), wrap())
+        root.addView(infoCard(tr(
+            "Chat with ASSAF support without creating an account. This device's conversation stays saved until you delete it.",
+            "تواصل مع إدارة ASSAF بدون تسجيل حساب. ستبقى محادثة هذا الجهاز محفوظة حتى تحذفها بنفسك."
+        )), wrap())
+        val deviceId = prefs.getString("assaf_support_device_id", null) ?: UUID.randomUUID().toString().replace("-", "").also {
+            prefs.edit().putString("assaf_support_device_id", it).apply()
+        }
         val message = EditText(this).apply {
             hint = tr("Write your message here…", "اكتب رسالتك هنا…")
             setTextColor(white); setHintTextColor(muted); textSize = 15f
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            minLines = 4; gravity = Gravity.TOP or Gravity.START
+            minLines = 3; gravity = Gravity.TOP or Gravity.START
             setPadding(dp(14), dp(12), dp(14), dp(12)); background = rounded(panel, 14)
         }
-        root.addView(message, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(120)).apply { topMargin = dp(14) })
+        root.addView(message, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(105)).apply { topMargin = dp(14) })
         val send = primaryButton(tr("Send message", "إرسال الرسالة"))
-        root.addView(send, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(12) })
+        root.addView(send, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(10) })
         val chatList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         fun loadConversations() {
-            val token = prefs.getString(KEY_API_TOKEN, null)
-            if (token.isNullOrBlank()) {
-                chatList.removeAllViews()
-                chatList.addView(infoCard(tr("Sign in to view replies and continue a conversation.", "سجّل الدخول حتى تشوف ردود الإدارة وتكمل المحادثة.")), wrap())
-                return
-            }
             chatList.removeAllViews()
-            chatList.addView(TextView(this).apply { text = tr("Loading conversations…", "جارٍ تحميل المحادثات…"); setTextColor(muted) }, wrap())
+            chatList.addView(TextView(this).apply {
+                text = tr("Loading conversation…", "جارٍ تحميل المحادثة…")
+                setTextColor(muted); textSize = 14f
+            }, wrap())
             Thread {
-                val result = runCatching { AssafApiClient.listSupportMessages(token) }
+                val result = runCatching { AssafApiClient.listDeviceSupportMessages(deviceId) }
                 runOnUiThread {
                     chatList.removeAllViews()
                     result.onSuccess { rows ->
-                        if (rows.length() == 0) chatList.addView(infoCard(tr("Your messages will appear here.", "رسائلك وردود الإدارة ستظهر هنا.")), wrap())
+                        if (rows.length() == 0) {
+                            chatList.addView(infoCard(tr("No messages yet. Send a message to start chatting.", "ما في رسائل لسه. ابعث رسالة وابدأ الدردشة.")), wrap())
+                        }
                         for (i in 0 until rows.length()) {
                             val row = rows.getJSONObject(i)
-                            val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12)); background = rounded(panel, 14) }
-                            card.addView(TextView(this).apply { text = tr("Your message", "رسالتك"); setTextColor(blue); textSize = 13f; typeface = Typeface.DEFAULT_BOLD }, wrap())
-                            card.addView(TextView(this).apply { text = row.optString("message"); setTextColor(white); textSize = 15f; setPadding(0, dp(6), 0, dp(10)) }, wrap())
+                            val messageId = row.optString("id")
+                            val card = LinearLayout(this).apply {
+                                orientation = LinearLayout.VERTICAL
+                                setPadding(dp(14), dp(12), dp(14), dp(12))
+                                background = rounded(panel, 14)
+                            }
+                            card.addView(TextView(this).apply {
+                                text = tr("Your message", "رسالتك")
+                                setTextColor(blue); textSize = 13f; typeface = Typeface.DEFAULT_BOLD
+                            }, wrap())
+                            card.addView(TextView(this).apply {
+                                text = row.optString("message"); setTextColor(white); textSize = 15f
+                                setPadding(0, dp(6), 0, dp(8))
+                            }, wrap())
                             val replies = row.optJSONArray("replies") ?: org.json.JSONArray()
                             for (j in 0 until replies.length()) {
                                 val reply = replies.getJSONObject(j)
                                 val ownerReply = reply.optString("sender") == "owner"
                                 card.addView(TextView(this).apply {
-                                    text = (if (ownerReply) tr("ASSAF support", "إدارة ASSAF") else tr("You", "أنت")) + ": " + reply.optString("message")
+                                    text = (if (ownerReply) tr("ASSAF owner", "مالك ASSAF") else tr("You", "أنت")) + ": " + reply.optString("message")
                                     setTextColor(if (ownerReply) green else muted); textSize = 14f
                                     setPadding(dp(10), dp(9), dp(10), dp(9)); background = rounded(panelLight, 10)
                                 }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
@@ -711,56 +727,78 @@ class MainActivity : Activity() {
                                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
                                 minLines = 2; setPadding(dp(10), dp(8), dp(10), dp(8)); background = rounded(panelLight, 10)
                             }
-                            card.addView(replyInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(76)).apply { topMargin = dp(10) })
+                            card.addView(replyInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)).apply { topMargin = dp(10) })
                             val replyButton = primaryButton(tr("Send reply", "إرسال الرد"))
                             card.addView(replyButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(8) })
                             replyButton.setOnClickListener {
                                 val value = replyInput.text.toString().trim()
-                                if (value.isBlank()) { replyInput.error = tr("Write a reply", "اكتب ردّك أولاً"); return@setOnClickListener }
+                                if (value.isBlank()) { replyInput.error = tr("Write a reply first", "اكتب الرد أولاً"); return@setOnClickListener }
                                 replyButton.isEnabled = false
                                 Thread {
-                                    val sent = runCatching { AssafApiClient.replyToSupport(token, row.optString("id"), value) }
+                                    val sent = runCatching { AssafApiClient.replyToDeviceSupport(deviceId, messageId, value) }
                                     runOnUiThread {
                                         replyButton.isEnabled = true
-                                        sent.onSuccess { loadConversations() }.onFailure { Toast.makeText(this, it.message ?: tr("Could not send reply", "تعذّر إرسال الرد"), Toast.LENGTH_LONG).show() }
+                                        sent.onSuccess { loadConversations() }.onFailure {
+                                            Toast.makeText(this, it.message ?: tr("Could not send reply", "تعذّر إرسال الرد"), Toast.LENGTH_LONG).show()
+                                        }
                                     }
                                 }.start()
                             }
+                            val deleteButton = smallButton().apply {
+                                text = tr("Delete conversation", "حذف المحادثة")
+                                setOnClickListener {
+                                    AlertDialog.Builder(this@MainActivity)
+                                        .setTitle(tr("Delete conversation?", "حذف المحادثة؟"))
+                                        .setMessage(tr("This removes this conversation and its replies permanently.", "سيؤدي هذا إلى حذف المحادثة وردودها نهائيًا."))
+                                        .setNegativeButton(tr("Cancel", "إلغاء"), null)
+                                        .setPositiveButton(tr("Delete", "حذف")) { _, _ ->
+                                            Thread {
+                                                val deleted = runCatching { AssafApiClient.deleteDeviceSupport(deviceId, messageId) }
+                                                runOnUiThread {
+                                                    deleted.onSuccess { loadConversations() }.onFailure {
+                                                        Toast.makeText(this, it.message ?: tr("Could not delete conversation", "تعذّر حذف المحادثة"), Toast.LENGTH_LONG).show()
+                                                    }
+                                                }
+                                            }.start()
+                                        }
+                                        .show()
+                                }
+                            }
+                            card.addView(deleteButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)).apply { topMargin = dp(8) })
                             chatList.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
                         }
-                    }.onFailure { chatList.addView(infoCard(tr("Could not load conversations: ", "تعذّر تحميل المحادثات: ") + (it.message ?: "")), wrap()) }
+                    }.onFailure {
+                        chatList.addView(infoCard(tr("Could not load conversation: ", "تعذّر تحميل المحادثة: ") + (it.message ?: "")), wrap())
+                    }
                 }
             }.start()
         }
         send.setOnClickListener {
-            val token = prefs.getString(KEY_API_TOKEN, null)
-            if (token.isNullOrBlank()) {
-                android.app.AlertDialog.Builder(this)
-                    .setTitle(tr("ASSAF account required", "يلزم تسجيل حساب ASSAF"))
-                    .setMessage(tr("Please sign in or create an account before contacting the owner. Your conversation and replies will be saved to your account.", "يرجى تسجيل الدخول أو إنشاء حساب قبل التواصل مع المالك. سيتم حفظ المحادثة والردود في حسابك."))
-                    .setPositiveButton(tr("Sign in / Create account", "تسجيل الدخول / إنشاء حساب")) { _, _ -> showAccountDialog() }
-                    .setNegativeButton(tr("Cancel", "إلغاء"), null)
-                    .show()
-                return@setOnClickListener
-            }
             val value = message.text.toString().trim()
             if (value.length < 5) { message.error = tr("Write at least 5 characters", "اكتب 5 أحرف على الأقل"); return@setOnClickListener }
             send.isEnabled = false
             Thread {
-                val result = runCatching { AssafApiClient.submitContact(value, token) }
+                val result = runCatching { AssafApiClient.submitDeviceContact(deviceId, value) }
                 runOnUiThread {
                     send.isEnabled = true
                     result.onSuccess {
                         message.text.clear()
-                        Toast.makeText(this, tr("Message sent to ASSAF support", "تم إرسال رسالتك إلى دعم ASSAF"), Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, tr("Message sent to ASSAF support", "تم إرسال رسالتك إلى إدارة ASSAF"), Toast.LENGTH_LONG).show()
                         loadConversations()
-                    }.onFailure { Toast.makeText(this, it.message ?: tr("Could not send message", "تعذّر إرسال الرسالة"), Toast.LENGTH_LONG).show() }
+                    }.onFailure {
+                        Toast.makeText(this, it.message ?: tr("Could not send message", "تعذّر إرسال الرسالة"), Toast.LENGTH_LONG).show()
+                    }
                 }
             }.start()
         }
-        root.addView(TextView(this).apply { text = tr("Your conversations", "محادثاتك مع الإدارة"); textSize = 19f; typeface = Typeface.DEFAULT_BOLD; setTextColor(white); setPadding(0, dp(22), 0, dp(10)) }, wrap())
-        root.addView(smallButton().apply { text = tr("Refresh conversations", "تحديث المحادثات"); setOnClickListener { loadConversations() } },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { bottomMargin = dp(10) })
+        root.addView(TextView(this).apply {
+            text = tr("Your conversation", "دردشتك مع الإدارة"); textSize = 19f
+            typeface = Typeface.DEFAULT_BOLD; setTextColor(white); setPadding(0, dp(22), 0, dp(10))
+        }, wrap())
+        root.addView(smallButton().apply {
+            text = tr("Refresh conversation", "تحديث الدردشة")
+            setOnClickListener { loadConversations() }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { bottomMargin = dp(10) })
         root.addView(chatList, wrap())
         root.addView(smallButton().apply {
             text = tr("Submit an appeal against the ban", "تقديم طعن على الحظر")
