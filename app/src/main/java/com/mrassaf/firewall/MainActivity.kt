@@ -661,6 +661,13 @@ class MainActivity : Activity() {
         }, wrap())
     }
 
+    private fun getGuestSupportToken(): String {
+        return prefs.getString("guest_support_token", null)
+            ?: UUID.randomUUID().toString().replace("-", "").also {
+                prefs.edit().putString("guest_support_token", it).apply()
+            }
+    }
+
     private fun buildContactScreen() {
         val root = pageRoot(tr("Contact Us", "تواصل معنا"))
         root.addView(infoCard(tr("Send a message to the ASSAF administration.", "أرسل رسالة إلى إدارة ASSAF.")), wrap())
@@ -677,15 +684,11 @@ class MainActivity : Activity() {
         val chatList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         fun loadConversations() {
             val token = prefs.getString(KEY_API_TOKEN, null)
-            if (token.isNullOrBlank()) {
-                chatList.removeAllViews()
-                chatList.addView(infoCard(tr("Sign in to view replies and continue a conversation.", "سجّل الدخول حتى تشوف ردود الإدارة وتكمل المحادثة.")), wrap())
-                return
-            }
+            val guestToken = if (token.isNullOrBlank()) getGuestSupportToken() else null
             chatList.removeAllViews()
             chatList.addView(TextView(this).apply { text = tr("Loading conversations…", "جارٍ تحميل المحادثات…"); setTextColor(muted) }, wrap())
             Thread {
-                val result = runCatching { AssafApiClient.listSupportMessages(token) }
+                val result = runCatching { AssafApiClient.listSupportMessages(token, guestToken) }
                 runOnUiThread {
                     chatList.removeAllViews()
                     result.onSuccess { rows ->
@@ -719,7 +722,7 @@ class MainActivity : Activity() {
                                 if (value.isBlank()) { replyInput.error = tr("Write a reply", "اكتب ردّك أولاً"); return@setOnClickListener }
                                 replyButton.isEnabled = false
                                 Thread {
-                                    val sent = runCatching { AssafApiClient.replyToSupport(token, row.optString("id"), value) }
+                                    val sent = runCatching { AssafApiClient.replyToSupport(token, row.optString("id"), value, guestToken) }
                                     runOnUiThread {
                                         replyButton.isEnabled = true
                                         sent.onSuccess { loadConversations() }.onFailure { Toast.makeText(this, it.message ?: tr("Could not send reply", "تعذّر إرسال الرد"), Toast.LENGTH_LONG).show() }
@@ -734,20 +737,12 @@ class MainActivity : Activity() {
         }
         send.setOnClickListener {
             val token = prefs.getString(KEY_API_TOKEN, null)
-            if (token.isNullOrBlank()) {
-                android.app.AlertDialog.Builder(this)
-                    .setTitle(tr("ASSAF account required", "يلزم تسجيل حساب ASSAF"))
-                    .setMessage(tr("Please sign in or create an account before contacting the owner. Your conversation and replies will be saved to your account.", "يرجى تسجيل الدخول أو إنشاء حساب قبل التواصل مع المالك. سيتم حفظ المحادثة والردود في حسابك."))
-                    .setPositiveButton(tr("Sign in / Create account", "تسجيل الدخول / إنشاء حساب")) { _, _ -> showAccountDialog() }
-                    .setNegativeButton(tr("Cancel", "إلغاء"), null)
-                    .show()
-                return@setOnClickListener
-            }
+            val guestToken = if (token.isNullOrBlank()) getGuestSupportToken() else null
             val value = message.text.toString().trim()
             if (value.length < 5) { message.error = tr("Write at least 5 characters", "اكتب 5 أحرف على الأقل"); return@setOnClickListener }
             send.isEnabled = false
             Thread {
-                val result = runCatching { AssafApiClient.submitContact(value, token) }
+                val result = runCatching { AssafApiClient.submitContact(value, token, guestToken) }
                 runOnUiThread {
                     send.isEnabled = true
                     result.onSuccess {
