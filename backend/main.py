@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -7,7 +8,7 @@ from typing import Generator
 from uuid import uuid4
 
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -58,6 +59,7 @@ class SupportMessage(Base):
     status: Mapped[str] = mapped_column(String(20), default="new", index=True)
     admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    guest_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
 
 
@@ -112,6 +114,11 @@ with engine.begin() as _connection:
     if "ban_reason" not in _user_columns:
         _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN ban_reason VARCHAR(500)")
 
+_support_columns = {column["name"] for column in inspect(engine).get_columns("support_messages")}
+if "guest_token_hash" not in _support_columns:
+    with engine.begin() as _connection:
+        _connection.exec_driver_sql("ALTER TABLE support_messages ADD COLUMN guest_token_hash VARCHAR(64)")
+
 app = FastAPI(
     title="ASSAF API",
     description="Backend API for ASSAF app settings, schedules, accounts, and subscription status.",
@@ -155,6 +162,7 @@ class UserResponse(BaseModel):
 
 class SupportMessageInput(BaseModel):
     message: str = Field(min_length=5, max_length=4000)
+    guest_token: str | None = Field(default=None, min_length=32, max_length=128)
 
 
 class BanRequest(BaseModel):
@@ -164,6 +172,7 @@ class BanRequest(BaseModel):
 
 class SupportReplyInput(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
+    guest_token: str | None = Field(default=None, min_length=32, max_length=128)
 
 
 class SupportDecision(BaseModel):
@@ -303,8 +312,11 @@ def me(user: User = Depends(current_user)):
 
 
 @app.post("/v1/support/messages", status_code=201, tags=["support"])
-def create_support_message(body: SupportMessageInput, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = SupportMessage(user_id=user.id, category="contact", message=body.message.strip())
+def create_support_message(body: SupportMessageInput, user: User | None = Depends(optional_user), db: Session = Depends(get_db)):
+    if user is None and not body.guest_token:
+        raise HTTPException(status_code=400, detail="Guest conversation token is required")
+    guest_hash = hashlib.sha256(body.guest_token.encode("utf-8")).hexdigest() if user is None and body.guest_token else None
+    row = SupportMessage(user_id=user.id if user else None, guest_token_hash=guest_hash, category="contact", message=body.message.strip())
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -455,8 +467,14 @@ def owner_support(_owner: dict = Depends(current_owner), db: Session = Depends(g
 
 
 @app.get("/v1/support/messages", tags=["support"])
-def user_support_messages(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    rows = db.scalars(select(SupportMessage).where(SupportMessage.user_id == user.id).order_by(SupportMessage.created_at.desc()).limit(100))
+def user_support_messages(user: User | None = Depends(optional_user), guest_token: str | None = Query(default=None, min_length=32, max_length=128), db: Session = Depends(get_db)):
+    if user is not None:
+        message_filter = SupportMessage.user_id == user.id
+    elif guest_token:
+        message_filter = SupportMessage.guest_token_hash == hashlib.sha256(guest_token.encode("utf-8")).hexdigest()
+    else:
+        raise HTTPException(status_code=401, detail="Guest conversation token is required")
+    rows = db.scalars(select(SupportMessage).where(message_filter).order_by(SupportMessage.created_at.desc()).limit(100))
     result = []
     for row in rows:
         replies = db.scalars(select(SupportReply).where(SupportReply.message_id == row.id).order_by(SupportReply.created_at.asc()))
@@ -465,9 +483,16 @@ def user_support_messages(user: User = Depends(current_user), db: Session = Depe
 
 
 @app.post("/v1/support/{message_id}/replies", status_code=201, tags=["support"])
-def user_support_reply(message_id: str, body: SupportReplyInput, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def user_support_reply(message_id: str, body: SupportReplyInput, user: User | None = Depends(optional_user), db: Session = Depends(get_db)):
     row = db.get(SupportMessage, message_id)
-    if row is None or row.user_id != user.id:
+    if row is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if user is not None:
+        authorized = row.user_id == user.id
+    else:
+        supplied_hash = hashlib.sha256(body.guest_token.encode("utf-8")).hexdigest() if body.guest_token else None
+        authorized = row.user_id is None and supplied_hash is not None and row.guest_token_hash == supplied_hash
+    if not authorized:
         raise HTTPException(status_code=404, detail="Conversation not found")
     reply = SupportReply(message_id=row.id, sender="user", message=body.message.strip())
     db.add(reply)
