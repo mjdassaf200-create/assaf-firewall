@@ -333,7 +333,7 @@ class MainActivity : Activity() {
 
     private fun addBannerAd(parent: LinearLayout) {
         val adView = AdView(this).apply {
-            adUnitId = "ca-app-pub-3940256099942544/6300978111"
+            adUnitId = "ca-app-pub-6000977044744613/3433171409"
             val widthDp = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 36).coerceAtLeast(320)
             setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this@MainActivity, widthDp))
             loadAd(AdRequest.Builder().build())
