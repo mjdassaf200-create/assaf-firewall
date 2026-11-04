@@ -54,17 +54,25 @@ object AssafApiClient {
 
     fun getMe(token: String): JSONObject = JSONObject(request("GET", "/v1/me", token))
 
-    fun submitContact(message: String, token: String? = null): JSONObject =
-        JSONObject(request("POST", "/v1/support/messages", token, JSONObject().put("message", message)))
+    fun submitContact(message: String, token: String? = null, guestToken: String? = null): JSONObject {
+        val body = JSONObject().put("message", message)
+        if (!guestToken.isNullOrBlank()) body.put("guest_token", guestToken)
+        return JSONObject(request("POST", "/v1/support/messages", token, body))
+    }
 
     fun submitAppeal(token: String, message: String): JSONObject =
         JSONObject(request("POST", "/v1/appeals", token, JSONObject().put("message", message)))
 
-    fun listSupportMessages(token: String): JSONArray =
-        JSONArray(request("GET", "/v1/support/messages", token))
+    fun listSupportMessages(token: String? = null, guestToken: String? = null): JSONArray {
+        val path = if (!guestToken.isNullOrBlank()) "/v1/support/messages?guest_token=$guestToken" else "/v1/support/messages"
+        return JSONArray(request("GET", path, token))
+    }
 
-    fun replyToSupport(token: String, messageId: String, message: String): JSONObject =
-        JSONObject(request("POST", "/v1/support/$messageId/replies", token, JSONObject().put("message", message)))
+    fun replyToSupport(token: String?, messageId: String, message: String, guestToken: String? = null): JSONObject {
+        val body = JSONObject().put("message", message)
+        if (!guestToken.isNullOrBlank()) body.put("guest_token", guestToken)
+        return JSONObject(request("POST", "/v1/support/$messageId/replies", token, body))
+    }
 
     fun pingTelemetry(installId: String, appVersion: String) {
         request("POST", "/v1/telemetry/ping", body = JSONObject()
