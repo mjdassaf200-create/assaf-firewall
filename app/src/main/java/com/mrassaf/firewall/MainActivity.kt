@@ -1225,7 +1225,7 @@ class MainActivity : Activity() {
                                 .setAction(FirewallVpnService.ACTION_START)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
                         }
-                        loadApps()
+                        buildUi()
                         Toast.makeText(this@MainActivity,
                             tr("Control mode changed", "تم تغيير وضع التحكم"), Toast.LENGTH_SHORT).show()
                     }
