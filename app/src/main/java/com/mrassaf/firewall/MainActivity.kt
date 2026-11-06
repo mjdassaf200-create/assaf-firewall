@@ -1069,7 +1069,7 @@ class MainActivity : Activity() {
             return card
         }
 
-        root.addView(featureCard(R.drawable.ic_assaf_apps, tr("Manage applications", "إدارة التطبيقات"),
+        root.addView(featureCard(R.drawable.apps_icon, tr("Manage applications", "إدارة التطبيقات"),
             tr("Choose apps whose internet you want to block", "اختر التطبيقات التي تريد فصل الإنترنت عنها"), "apps"),
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(116)).apply { bottomMargin = dp(14) })
         root.addView(featureCard(R.drawable.ic_assaf_link, tr("Link Check", "فحص الروابط"),
