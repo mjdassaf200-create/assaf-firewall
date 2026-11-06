@@ -23,12 +23,13 @@ class FirewallVpnService : VpnService() {
     }
 
     private fun startFirewall() {
-        val selected = getSharedPreferences(PREFS, MODE_PRIVATE)
-            .getStringSet(KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
+        val settings = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val mode = settings.getInt(KEY_CONTROL_MODE, MODE_INDIVIDUAL)
+        val selected = settings.getStringSet(KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
             .filter { pkg ->
                 pkg != packageName && runCatching { packageManager.getApplicationInfo(pkg, 0) }.isSuccess
             }.toSet()
-        if (selected.isEmpty()) { stopFirewall(); return }
+        if (mode == MODE_INDIVIDUAL && selected.isEmpty()) { stopFirewall(); return }
         startForeground(NOTIFICATION_ID, buildNotification())
         try {
             stopTunnelOnly()
@@ -40,7 +41,13 @@ class FirewallVpnService : VpnService() {
             // otherwise selected apps may bypass the firewall over IPv6 on older devices.
             builder.addAddress("fd00:111::1", 128)
             builder.addRoute("::", 0)
-            selected.forEach { builder.addAllowedApplication(it) }
+            if (mode == MODE_INDIVIDUAL) {
+                // Individual mode: route only selected apps through the VPN and drop their packets.
+                selected.forEach { builder.addAllowedApplication(it) }
+            } else {
+                // Exceptions mode: route every app through the VPN except the user's allowed list.
+                selected.forEach { builder.addDisallowedApplication(it) }
+            }
             tunnel = builder.establish()
             val established = tunnel
             if (established == null) {
@@ -99,8 +106,9 @@ class FirewallVpnService : VpnService() {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, channelId) else {
             @Suppress("DEPRECATION") Notification.Builder(this)
         }
+        val mode = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_CONTROL_MODE, MODE_INDIVIDUAL)
         return builder.setContentTitle("ASSAF Firewall is active")
-            .setContentText("Blocking internet for selected apps")
+            .setContentText(if (mode == MODE_INDIVIDUAL) "Blocking selected apps" else "Allowing exceptions only")
             .setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build()
     }
 
@@ -115,6 +123,9 @@ class FirewallVpnService : VpnService() {
         const val KEY_BLOCKED_BYTES = "blocked_bytes"
         const val KEY_BLOCKED_PACKETS = "blocked_packets"
         const val KEY_FIREWALL_ACTIVE = "firewall_active"
+        const val KEY_CONTROL_MODE = "control_mode"
+        const val MODE_INDIVIDUAL = 0
+        const val MODE_EXCEPTIONS = 1
         private const val NOTIFICATION_ID = 7001
         private const val TAG = "ASSAF"
     }
