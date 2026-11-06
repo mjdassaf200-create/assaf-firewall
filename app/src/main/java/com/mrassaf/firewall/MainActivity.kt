@@ -1196,6 +1196,55 @@ class MainActivity : Activity() {
         statusParams.topMargin = dp(14)
         root.addView(statusText, statusParams)
 
+        val modeRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        }
+        fun addModeOption(title: String, subtitle: String, modeValue: Int) {
+            val selectedMode = prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL)
+            val option = TextView(this).apply {
+                text = "$title\n$subtitle"
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(white)
+                setPadding(dp(8), dp(12), dp(8), dp(12))
+                background = GradientDrawable().apply {
+                    setColor(if (selectedMode == modeValue) Color.rgb(5, 82, 176) else panel)
+                    cornerRadius = dp(18).toFloat()
+                    setStroke(dp(if (selectedMode == modeValue) 2 else 1),
+                        if (selectedMode == modeValue) blue else Color.rgb(48, 78, 119))
+                }
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    if (prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL) != modeValue) {
+                        prefs.edit().putInt(FirewallVpnService.KEY_CONTROL_MODE, modeValue).apply()
+                        if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
+                            val serviceIntent = Intent(this@MainActivity, FirewallVpnService::class.java)
+                                .setAction(FirewallVpnService.ACTION_START)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
+                        }
+                        loadApps()
+                        Toast.makeText(this@MainActivity,
+                            tr("Control mode changed", "تم تغيير وضع التحكم"), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            modeRow.addView(option, LinearLayout.LayoutParams(0, dp(76), 1f).apply {
+                marginStart = dp(4)
+                marginEnd = dp(4)
+            })
+        }
+        addModeOption(tr("Individual control", "التحكم الفردي"),
+            tr("Block selected apps", "افصل التطبيقات المحددة"), FirewallVpnService.MODE_INDIVIDUAL)
+        addModeOption(tr("Exceptions mode", "وضع الاستثناءات"),
+            tr("Allow selected apps only", "اسمح للتطبيقات المحددة فقط"), FirewallVpnService.MODE_EXCEPTIONS)
+        root.addView(modeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(80)).apply {
+            topMargin = dp(12)
+            bottomMargin = dp(4)
+        })
+
         countText = TextView(this).apply {
             textSize = 12f
             setTextColor(muted)
@@ -1308,6 +1357,7 @@ class MainActivity : Activity() {
     }
 
     private fun syncCloudSettingChanges() {
+        if (prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL) != FirewallVpnService.MODE_INDIVIDUAL) return
         val token = prefs.getString(KEY_API_TOKEN, null) ?: return
         val localSelected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty().toSet()
         Thread {
@@ -1364,6 +1414,7 @@ class MainActivity : Activity() {
         listContainer.removeAllViews()
         appRows.clear()
         val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
+        val mode = prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL)
         val favorites = prefs.getStringSet(KEY_FAVORITE_APPS, emptySet()).orEmpty().toSet()
 
         val installedApps = packageManager.getInstalledApplications(0)
@@ -1405,7 +1456,7 @@ class MainActivity : Activity() {
                     }
                 } else listContainer.getChildAt(listContainer.childCount - 1) as? LinearLayout
 
-                val isBlocked = selected.contains(pkg)
+                val isBlocked = if (mode == FirewallVpnService.MODE_INDIVIDUAL) pkg in selected else pkg !in selected
                 val isFavorite = pkg in favorites
                 val tile = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
@@ -1460,7 +1511,7 @@ class MainActivity : Activity() {
                     setPadding(0, dp(5), 0, dp(3))
                 }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
                 tile.addView(TextView(this).apply {
-                    text = if (isBlocked) tr("BLOCKED", "محجوب") else tr("ALLOWED", "مسموح")
+                    text = if (isBlocked) tr("BLOCKED", "مفصول") else tr("ALLOWED", "متصل")
                     textSize = 9f
                     typeface = Typeface.DEFAULT_BOLD
                     gravity = Gravity.CENTER
@@ -1541,46 +1592,51 @@ class MainActivity : Activity() {
             }, wrap())
         }
 
+        val selectionDescription = if (mode == FirewallVpnService.MODE_INDIVIDUAL)
+            tr("selected to block", "محددة للفصل") else tr("allowed exceptions", "تطبيقات مستثناة")
         countText.text = tr(
-            "${installedApps.size} apps found • ${favoriteApps.size} favorites • ${selected.size} selected",
-            "التطبيقات: ${installedApps.size} • المفضلة: ${favoriteApps.size} • المحددة للحجب: ${selected.size}"
+            "${installedApps.size} apps found • ${favoriteApps.size} favorites • ${selected.size} $selectionDescription",
+            "التطبيقات: ${installedApps.size} • المفضلة: ${favoriteApps.size} • ${selected.size} $selectionDescription"
         )
         val firewallActive = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
         statusText.text = if (firewallActive) {
-            tr("${selected.size} apps selected • Protection is active", "${selected.size} تطبيقات محددة • الحماية تعمل")
+            tr("Protection is active • ${selected.size} $selectionDescription", "الحماية تعمل • ${selected.size} $selectionDescription")
         } else {
-            tr("${selected.size} apps selected. Apply to start protection.", "${selected.size} تطبيقات محددة. اضغط تطبيق لبدء الحماية.")
+            tr("Choose apps, then start protection.", "اختر التطبيقات ثم فعّل الحماية.")
         }
     }
 
     private fun confirmAppConnection(packageName: String, appName: String) {
-        val blocked = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty().contains(packageName)
-        val title = if (blocked) tr("Restore internet connection?", "معاودة الاتصال بالإنترنت؟")
-                    else tr("Stop internet connection?", "إيقاف الاتصال بالإنترنت؟")
+        val mode = prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL)
+        val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
+        val blocked = if (mode == FirewallVpnService.MODE_INDIVIDUAL) packageName in selected else packageName !in selected
+        val title = if (blocked) tr("Restore internet connection?", "إعادة الإنترنت؟")
+                    else tr("Stop internet connection?", "فصل الإنترنت؟")
         val message = if (blocked) tr("Allow $appName to access the internet again?", "هل تريد السماح لتطبيق $appName بالاتصال بالإنترنت من جديد؟")
-                      else tr("Block internet access for $appName?", "هل تريد إيقاف اتصال تطبيق $appName بالإنترنت؟")
+                      else tr("Block internet access for $appName?", "هل تريد فصل الإنترنت عن تطبيق $appName؟")
         android.app.AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage(message)
             .setNegativeButton(tr("Cancel", "إلغاء"), null)
             .setPositiveButton(if (blocked) tr("Reconnect", "معاودة الاتصال") else tr("Block internet", "إيقاف الاتصال")) { _, _ ->
-                val updated = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty().toMutableSet()
-                if (blocked) updated.remove(packageName) else updated.add(packageName)
+                val updated = selected.toMutableSet()
+                if (mode == FirewallVpnService.MODE_INDIVIDUAL) {
+                    if (blocked) updated.remove(packageName) else updated.add(packageName)
+                } else {
+                    if (blocked) updated.add(packageName) else updated.remove(packageName)
+                }
                 prefs.edit().putStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, updated).apply()
-                prefs.getString(KEY_API_TOKEN, null)?.let { token ->
-                    Thread { runCatching { AssafApiClient.saveSetting(token, packageName, !blocked) } }.start()
+                if (mode == FirewallVpnService.MODE_INDIVIDUAL) {
+                    prefs.getString(KEY_API_TOKEN, null)?.let { token ->
+                        Thread { runCatching { AssafApiClient.saveSetting(token, packageName, !blocked) } }.start()
+                    }
                 }
                 loadApps()
-                if (updated.isEmpty()) {
+                if (mode == FirewallVpnService.MODE_INDIVIDUAL && updated.isEmpty()) {
                     startService(Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
-                } else if (!blocked) {
-                    // When the user blocks an app, start the VPN immediately if needed.
-                    // Android's VPN consent is requested only the first time (or after revocation).
+                } else if (mode == FirewallVpnService.MODE_EXCEPTIONS || !blocked ||
+                    prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
                     requestVpnAndStart()
-                } else if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
-                    // Keep the VPN rules in sync after an app is allowed again.
-                    val serviceIntent = Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_START)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
                 }
                 val toastText = if (blocked) tr("Internet connection restored for $appName", "تمت معاودة اتصال $appName بالإنترنت")
                                  else tr("Internet blocking requested for $appName", "تم طلب فصل الإنترنت عن $appName")
@@ -1622,8 +1678,9 @@ class MainActivity : Activity() {
 
     private fun requestVpnAndStart() {
         val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
-        if (selected.isEmpty()) {
-            Toast.makeText(this, tr("Select at least one app first", "اختر تطبيقًا واحدًا على الأقل"), Toast.LENGTH_LONG).show()
+        val mode = prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL)
+        if (mode == FirewallVpnService.MODE_INDIVIDUAL && selected.isEmpty()) {
+            Toast.makeText(this, tr("Select at least one app to block", "اختر تطبيقًا واحدًا على الأقل لحجبه"), Toast.LENGTH_LONG).show()
             return
         }
         val intent = VpnService.prepare(this)
