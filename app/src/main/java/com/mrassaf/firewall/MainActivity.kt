@@ -1007,19 +1007,48 @@ class MainActivity : Activity() {
             bottomMargin = dp(16)
         })
 
-        fun shortcut(title: String, subtitle: String, target: String) {
-            val button = smallButton().apply {
-                text = "$title  ›"
-                textSize = 14f
+        fun shortcut(title: String, subtitle: String, target: String, iconRes: Int) {
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(16), dp(12), dp(16), dp(12))
+                background = GradientDrawable().apply {
+                    setColor(cardBg)
+                    cornerRadius = dp(16).toFloat()
+                    setStroke(dp(1), border)
+                }
+                isClickable = true
+                isFocusable = true
                 setOnClickListener { goTo(target) }
             }
-            root.addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply {
-                bottomMargin = dp(8)
+            item.addView(ImageView(this).apply {
+                setImageResource(iconRes)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                contentDescription = title
+            }, LinearLayout.LayoutParams(dp(40), dp(40)))
+            val texts = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(15), 0, dp(8), 0)
+            }
+            texts.addView(label(title, 16f, Color.WHITE, true), wrap())
+            texts.addView(label(subtitle, 12f, gray).apply {
+                setPadding(0, dp(4), 0, 0)
+            }, wrap())
+            item.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            item.addView(label(if (arabic) "‹" else "›", 26f, Color.WHITE, true), LinearLayout.LayoutParams(dp(20), ViewGroup.LayoutParams.WRAP_CONTENT))
+            root.addView(item, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(10)
             })
         }
-        shortcut(tr("Manage applications", "إدارة التطبيقات"), "", "apps")
-        shortcut(tr("Link Check", "فحص الروابط"), "", "link")
-        shortcut(tr("Contact Us", "تواصل معنا"), "", "contact")
+        shortcut(tr("Manage applications", "إدارة التطبيقات"),
+            tr("Choose which apps can access the internet", "اختر التطبيقات التي تسمح لها بالاتصال بالإنترنت"),
+            "apps", R.drawable.ic_assaf_apps)
+        shortcut(tr("Link Check", "فحص الروابط"),
+            tr("Check a link before you open it", "تحقق من أمان أي رابط قبل فتحه"),
+            "link", R.drawable.ic_assaf_link)
+        shortcut(tr("Contact Us", "تواصل معنا"),
+            tr("Send a message directly to the owner", "أرسل رسالة مباشرة إلى مالك التطبيق"),
+            "contact", R.drawable.ic_assaf_privacy)
 
         root.addView(label("M R .  A S S A F", 12f, Color.rgb(63, 85, 119), true).apply {
             gravity = Gravity.CENTER
