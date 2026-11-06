@@ -861,114 +861,117 @@ class MainActivity : Activity() {
         val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
         val mode = prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL)
         val blockedCount = if (mode == FirewallVpnService.MODE_INDIVIDUAL) selected.size else 0
-        val bg = Color.rgb(1, 13, 32)
-        val cardBg = Color.rgb(4, 24, 53)
-        val accent = Color.rgb(30, 136, 229)
-        val border = Color.rgb(10, 42, 90)
-        val gray = Color.argb(153, 255, 255, 255)
 
-        fun makeCard(): LinearLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(18))
-            background = GradientDrawable().apply {
-                setColor(cardBg)
-                cornerRadius = dp(16).toFloat()
-                setStroke(dp(1), border)
+        val backgroundColor = Color.rgb(5, 11, 20)       // #050B14
+        val cardColor = Color.rgb(13, 25, 43)
+        val accentBlue = Color.rgb(0, 132, 255)          // #0084FF
+        val secondaryText = Color.rgb(138, 162, 192)     // #8AA2C0
+        val dividerColor = Color.rgb(27, 49, 82)         // #1B3152
+        val dangerRed = Color.rgb(255, 82, 82)
+
+        fun textView(value: String, size: Float, color: Int, bold: Boolean = false) =
+            TextView(this).apply {
+                text = value
+                textSize = size
+                setTextColor(color)
+                if (bold) typeface = Typeface.DEFAULT_BOLD
             }
+
+        fun cardBackground() = GradientDrawable().apply {
+            setColor(cardColor)
+            cornerRadius = dp(15).toFloat()
         }
-        fun label(value: String, size: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
-            text = value
-            textSize = size
-            setTextColor(color)
-            if (bold) typeface = Typeface.DEFAULT_BOLD
+
+        fun cardLayout() = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            background = cardBackground()
         }
 
         val scroll = ScrollView(this).apply {
             setFillViewport(true)
             isVerticalScrollBarEnabled = false
-            setBackgroundColor(bg)
+            setBackgroundColor(backgroundColor)
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(20), dp(18), dp(20), dp(20))
+            setPadding(dp(16), 0, dp(16), dp(24))
             layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
         scroll.addView(root)
-
-        val top = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        top.addView(smallButton().apply {
-            text = "⚙"
-            setOnClickListener { goTo("settings") }
-        }, LinearLayout.LayoutParams(dp(46), dp(44)))
-        top.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
-        top.addView(ImageView(this).apply {
-            setImageResource(R.drawable.ic_assaf_shield)
-            setColorFilter(Color.WHITE)
-            contentDescription = tr("ASSAF shield", "درع ASSAF")
-            setOnClickListener { goTo("shield") }
-        }, LinearLayout.LayoutParams(dp(36), dp(36)))
-        root.addView(top, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)))
 
         root.addView(ImageView(this).apply {
             setImageResource(R.drawable.assaf_logo)
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = tr("ASSAF logo", "شعار ASSAF")
-        }, LinearLayout.LayoutParams(dp(120), dp(120)).apply {
-            topMargin = dp(14)
-            bottomMargin = dp(2)
+        }, LinearLayout.LayoutParams(dp(140), dp(140)).apply {
+            topMargin = dp(24)
         })
 
-        root.addView(label("ASSAF", 34f, Color.WHITE, true).apply {
+        root.addView(textView("ASSAF", 24f, Color.WHITE, true).apply {
             gravity = Gravity.CENTER
-            letterSpacing = 0.18f
-            setShadowLayer(dp(10).toFloat(), 0f, 0f, accent)
-            setPadding(0, dp(4), 0, dp(2))
-        }, wrap())
-        root.addView(label("YOUR INTERNET. YOUR CONTROL.", 10f, gray).apply {
-            gravity = Gravity.CENTER
-            letterSpacing = 0.16f
-        }, wrap())
-        root.addView(label(tr("Your protection, under your control", "حمايتك تحت سيطرتك"), 24f, Color.WHITE, true).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, dp(34), 0, dp(8))
-        }, wrap())
-        root.addView(label(tr("Manage your apps’ internet access easily", "تحكّم باتصال تطبيقاتك بالإنترنت بسهولة"), 14f, gray).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(24))
+            letterSpacing = 0.2f
+            setPadding(0, dp(8), 0, 0)
         }, wrap())
 
-        val protection = makeCard()
+        root.addView(textView("YOUR INTERNET. YOUR CONTROL.", 10f, secondaryText).apply {
+            gravity = Gravity.CENTER
+            letterSpacing = 0.1f
+            setPadding(0, dp(2), 0, 0)
+        }, wrap())
+
+        root.addView(textView(tr("Your protection, under your control", "حمايتك تحت سيطرتك"), 20f, Color.WHITE, true).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, dp(28), 0, 0)
+        }, wrap())
+
+        root.addView(textView(tr("Manage your apps’ internet access easily", "تحكّم باتصال تطبيقاتك بالإنترنت بسهولة"), 13f, secondaryText).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, 0)
+        }, wrap())
+
+        val protectionCard = cardLayout()
         val statusRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         statusRow.addView(ImageView(this).apply {
             setImageResource(R.drawable.ic_assaf_shield)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.rgb(10, 42, 90))
-                setStroke(dp(1), accent)
-            }
-            setColorFilter(accent)
-        }, LinearLayout.LayoutParams(dp(54), dp(54)))
+            setColorFilter(accentBlue)
+            contentDescription = tr("Protection status", "حالة الحماية")
+        }, LinearLayout.LayoutParams(dp(36), dp(36)))
+
         val statusColumn = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), 0, dp(6), 0)
+            setPadding(dp(12), 0, 0, 0)
         }
-        statusColumn.addView(label(tr("Protection status", "حالة الحماية"), 17f, Color.WHITE, true), wrap())
-        statusColumn.addView(label(
-            (if (active) "● " else "● ") + tr(if (active) "Active" else "Not active", if (active) "مفعّلة" else "غير مفعّلة"),
-            13f, if (active) Color.rgb(67, 211, 155) else Color.rgb(255, 82, 82)
-        ).apply { setPadding(0, dp(4), 0, 0) }, wrap())
+        statusColumn.addView(textView(tr("Protection status", "حالة الحماية"), 15f, Color.WHITE, true), wrap())
+        val statusLine = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        statusLine.addView(View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(if (active) Color.rgb(67, 211, 155) else dangerRed)
+            }
+        }, LinearLayout.LayoutParams(dp(6), dp(6)))
+        statusLine.addView(textView(
+            if (active) tr("Active", "مفعّلة") else tr("Not active", "غير مفعّلة"),
+            12f, if (active) Color.rgb(67, 211, 155) else dangerRed
+        ).apply { setPadding(dp(6), 0, 0, 0) }, wrap())
+        statusColumn.addView(statusLine, wrap())
         statusRow.addView(statusColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        protection.addView(statusRow, wrap())
-        protection.addView(primaryButton(tr(if (active) "Turn protection off" else "Enable protection",
-            if (active) "إيقاف الحماية" else "تفعيل الحماية")).apply {
+        protectionCard.addView(statusRow, wrap())
+
+        protectionCard.addView(primaryButton(
+            if (active) tr("Turn protection off", "إيقاف الحماية") else tr("Enable protection", "تفعيل الحماية")
+        ).apply {
+            background = GradientDrawable().apply {
+                setColor(accentBlue)
+                cornerRadius = dp(9).toFloat()
+            }
             setOnClickListener {
                 if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
                     startService(Intent(this@MainActivity, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
@@ -977,46 +980,47 @@ class MainActivity : Activity() {
                 }
                 root.postDelayed({ buildUi() }, 700)
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(18) })
-        root.addView(protection, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(14)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply {
+            topMargin = dp(16)
+        })
+        root.addView(protectionCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(20)
         })
 
-        val stats = makeCard()
+        val statsCard = cardLayout()
         val statsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        fun addStat(value: String, caption: String, icon: String, color: Int, action: () -> Unit) {
-            val item = LinearLayout(this).apply {
+        fun addStatistic(value: String, caption: String, symbol: String, color: Int) {
+            val column = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                isClickable = true
-                isFocusable = true
-                setOnClickListener { action() }
             }
-            item.addView(label("$icon  $value", 22f, color, true).apply { gravity = Gravity.CENTER }, wrap())
-            item.addView(label(caption, 11f, gray).apply { gravity = Gravity.CENTER; setPadding(0, dp(4), 0, 0) }, wrap())
-            statsRow.addView(item, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            column.addView(textView("$symbol  $value", 18f, color, true).apply {
+                gravity = Gravity.CENTER
+            }, wrap())
+            column.addView(textView(caption, 11f, secondaryText).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(4), 0, 0)
+            }, wrap())
+            statsRow.addView(column, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        addStat(blockedCount.toString(), tr("Blocked apps", "تطبيقات محظورة"), "⊘", Color.rgb(255, 82, 82)) { goTo("apps") }
-        statsRow.addView(View(this).apply { setBackgroundColor(border) }, LinearLayout.LayoutParams(dp(1), dp(42)))
-        addStat(selected.size.toString(), tr("Selected apps", "تطبيقات محددة"), "▦", accent) { goTo("apps") }
-        stats.addView(statsRow, wrap())
-        root.addView(stats, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(16)
+        addStatistic(blockedCount.toString(), tr("Blocked apps", "تطبيقات محظورة"), "⊘", dangerRed)
+        statsRow.addView(View(this).apply { setBackgroundColor(dividerColor) },
+            LinearLayout.LayoutParams(dp(1), dp(32)))
+        addStatistic(selected.size.toString(), tr("Selected apps", "تطبيقات محددة"), "▦", accentBlue)
+        statsCard.addView(statsRow, wrap())
+        root.addView(statsCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(12)
         })
 
         fun shortcut(title: String, subtitle: String, target: String, iconRes: Int) {
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(16), dp(12), dp(16), dp(12))
-                background = GradientDrawable().apply {
-                    setColor(cardBg)
-                    cornerRadius = dp(16).toFloat()
-                    setStroke(dp(1), border)
-                }
+                setPadding(dp(16), dp(16), dp(16), dp(16))
+                background = cardBackground()
                 isClickable = true
                 isFocusable = true
                 setOnClickListener { goTo(target) }
@@ -1025,21 +1029,22 @@ class MainActivity : Activity() {
                 setImageResource(iconRes)
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 contentDescription = title
-            }, LinearLayout.LayoutParams(dp(40), dp(40)))
+            }, LinearLayout.LayoutParams(dp(28), dp(28)))
             val texts = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(15), 0, dp(8), 0)
+                setPadding(dp(12), 0, dp(8), 0)
             }
-            texts.addView(label(title, 16f, Color.WHITE, true), wrap())
-            texts.addView(label(subtitle, 12f, gray).apply {
-                setPadding(0, dp(4), 0, 0)
+            texts.addView(textView(title, 15f, Color.WHITE, true), wrap())
+            texts.addView(textView(subtitle, 11f, secondaryText).apply {
+                setPadding(0, dp(2), 0, 0)
             }, wrap())
             item.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            item.addView(label(if (arabic) "‹" else "›", 26f, Color.WHITE, true), LinearLayout.LayoutParams(dp(20), ViewGroup.LayoutParams.WRAP_CONTENT))
+            item.addView(textView(if (arabic) "‹" else "›", 20f, Color.WHITE, true), wrap())
             root.addView(item, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(10)
+                topMargin = dp(12)
             })
         }
+
         shortcut(tr("Manage applications", "إدارة التطبيقات"),
             tr("Choose which apps can access the internet", "اختر التطبيقات التي تسمح لها بالاتصال بالإنترنت"),
             "apps", R.drawable.ic_assaf_apps)
@@ -1050,11 +1055,12 @@ class MainActivity : Activity() {
             tr("Send a message directly to the owner", "أرسل رسالة مباشرة إلى مالك التطبيق"),
             "contact", R.drawable.ic_assaf_contact)
 
-        root.addView(label("M R .  A S S A F", 12f, Color.rgb(63, 85, 119), true).apply {
+        root.addView(textView("M R .   A S S A F", 11f, Color.rgb(86, 112, 149)).apply {
             gravity = Gravity.CENTER
-            letterSpacing = 0.22f
-            setPadding(0, dp(22), 0, dp(8))
+            letterSpacing = 0.25f
+            setPadding(0, dp(24), 0, dp(8))
         }, wrap())
+
         setContentView(scroll)
     }
 
