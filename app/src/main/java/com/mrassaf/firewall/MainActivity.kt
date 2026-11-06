@@ -58,6 +58,7 @@ class MainActivity : Activity() {
     private var activityResumed = false
     private var appOpenShowing = false
     private var interstitialShowing = false
+    private var showAllApps = false
     private var appOpenShownThisLaunch = false
     private var accountBanned = false
     private var banReason = ""
@@ -1260,7 +1261,13 @@ class MainActivity : Activity() {
             setHintTextColor(muted)
             background = rounded(panel, 13)
             setPadding(dp(14), dp(10), dp(14), dp(10))
-            addTextChangedListener(SimpleTextWatcher { filterApps(it) })
+            addTextChangedListener(SimpleTextWatcher { query ->
+                if (query.isNotBlank() && !showAllApps) {
+                    showAllApps = true
+                    loadApps()
+                }
+                filterApps(query)
+            })
         }
         val searchParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         searchParams.topMargin = dp(10)
@@ -1580,7 +1587,20 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(8) })
         addHeading(tr("ALL APPLICATIONS", "كل التطبيقات"))
-        renderApps(otherApps)
+        val visibleApps = if (showAllApps) otherApps else otherApps.take(6)
+        renderApps(visibleApps)
+        if (otherApps.size > 6) {
+            listContainer.addView(smallButton().apply {
+                text = if (showAllApps) tr("Show fewer apps", "عرض عدد أقل") else tr("Show all ${otherApps.size} apps", "عرض كل التطبيقات (${otherApps.size})")
+                setOnClickListener {
+                    showAllApps = !showAllApps
+                    loadApps()
+                }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply {
+                topMargin = dp(8)
+                bottomMargin = dp(8)
+            })
+        }
 
         if (installedApps.isEmpty()) {
             listContainer.addView(TextView(this).apply {
