@@ -877,10 +877,7 @@ class MainActivity : Activity() {
                 if (bold) typeface = Typeface.DEFAULT_BOLD
             }
 
-        fun cardBackground() = GradientDrawable().apply {
-            setColor(cardColor)
-            cornerRadius = dp(15).toFloat()
-        }
+        fun cardBackground() = getDrawable(R.drawable.bg_card_rounded)
 
         fun cardLayout() = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -968,10 +965,7 @@ class MainActivity : Activity() {
         protectionCard.addView(primaryButton(
             if (active) tr("Turn protection off", "إيقاف الحماية") else tr("Enable protection", "تفعيل الحماية")
         ).apply {
-            background = GradientDrawable().apply {
-                setColor(accentBlue)
-                cornerRadius = dp(9).toFloat()
-            }
+            background = getDrawable(R.drawable.bg_card_rounded)
             setOnClickListener {
                 if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
                     startService(Intent(this@MainActivity, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
@@ -1719,7 +1713,7 @@ ${formatBytes(blockedBytes)}  •  ${packets} حزمة
 
     private fun card(color: Int) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        background = rounded(color, 18)
+        background = getDrawable(R.drawable.bg_card_rounded)
     }
 
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
@@ -1732,7 +1726,7 @@ ${formatBytes(blockedBytes)}  •  ${packets} حزمة
         textSize = 14f
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(Color.WHITE)
-        background = rounded(blue, 14)
+        background = getDrawable(R.drawable.bg_card_rounded)
         isAllCaps = false
     }
 
@@ -1740,7 +1734,7 @@ ${formatBytes(blockedBytes)}  •  ${packets} حزمة
         textSize = 13f
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(white)
-        background = rounded(panelLight, 12)
+        background = getDrawable(R.drawable.bg_card_rounded)
         isAllCaps = false
     }
 
