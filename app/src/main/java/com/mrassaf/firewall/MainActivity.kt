@@ -1,5 +1,32 @@
 package com.mrassaf.firewall
 
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.SupportAgent
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.TimePickerDialog
@@ -40,7 +67,7 @@ import android.text.InputType
 import java.util.Locale
 import java.util.UUID
 
-class MainActivity : Activity() {
+class MainActivity : ComponentActivity() {
     private lateinit var listContainer: LinearLayout
     private lateinit var statusText: TextView
     private lateinit var statsText: TextView
@@ -861,201 +888,26 @@ class MainActivity : Activity() {
         val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
         val mode = prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL)
         val blockedCount = if (mode == FirewallVpnService.MODE_INDIVIDUAL) selected.size else 0
-
-        val backgroundColor = Color.rgb(5, 11, 20)       // #050B14
-        val cardColor = Color.rgb(13, 25, 43)
-        val accentBlue = Color.rgb(0, 132, 255)          // #0084FF
-        val secondaryText = Color.rgb(138, 162, 192)     // #8AA2C0
-        val dividerColor = Color.rgb(27, 49, 82)         // #1B3152
-        val dangerRed = Color.rgb(255, 82, 82)
-
-        fun textView(value: String, size: Float, color: Int, bold: Boolean = false) =
-            TextView(this).apply {
-                text = value
-                textSize = size
-                setTextColor(color)
-                if (bold) typeface = Typeface.DEFAULT_BOLD
+        setContent {
+            AssafTheme {
+                MainScreen(
+                    isProtectionActive = active,
+                    blockedCount = blockedCount,
+                    selectedCount = selected.size,
+                    onToggleProtection = {
+                        if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
+                            startService(Intent(this@MainActivity, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
+                        } else {
+                            requestVpnAndStart()
+                        }
+                        Handler(Looper.getMainLooper()).postDelayed({ buildUi() }, 700)
+                    },
+                    onManageApps = { goTo("apps") },
+                    onCheckLinks = { goTo("link") },
+                    onContact = { goTo("contact") }
+                )
             }
-
-        fun cardBackground() = getDrawable(R.drawable.bg_card_rounded)
-
-        fun cardLayout() = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(16), dp(16), dp(16))
-            background = cardBackground()
         }
-
-        val scroll = ScrollView(this).apply {
-            setFillViewport(true)
-            isVerticalScrollBarEnabled = false
-            setBackgroundColor(backgroundColor)
-        }
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(16), 0, dp(16), dp(24))
-            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
-        }
-        scroll.addView(root)
-
-        root.addView(ImageView(this).apply {
-            setImageResource(R.drawable.assaf_logo)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            contentDescription = tr("ASSAF logo", "شعار ASSAF")
-        }, LinearLayout.LayoutParams(dp(140), dp(140)).apply {
-            topMargin = dp(24)
-        })
-
-        root.addView(textView("ASSAF", 24f, Color.WHITE, true).apply {
-            gravity = Gravity.CENTER
-            letterSpacing = 0.2f
-            setPadding(0, dp(8), 0, 0)
-        }, wrap())
-
-        root.addView(textView("YOUR INTERNET. YOUR CONTROL.", 10f, secondaryText).apply {
-            gravity = Gravity.CENTER
-            letterSpacing = 0.1f
-            setPadding(0, dp(2), 0, 0)
-        }, wrap())
-
-        root.addView(textView(tr("Your protection, under your control", "حمايتك تحت سيطرتك"), 20f, Color.WHITE, true).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, dp(28), 0, 0)
-        }, wrap())
-
-        root.addView(textView(tr("Manage your apps’ internet access easily", "تحكّم باتصال تطبيقاتك بالإنترنت بسهولة"), 13f, secondaryText).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, dp(4), 0, 0)
-        }, wrap())
-
-        val protectionCard = cardLayout()
-        val statusRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        statusRow.addView(ImageView(this).apply {
-            setImageResource(R.drawable.ic_assaf_shield)
-            setColorFilter(accentBlue)
-            contentDescription = tr("Protection status", "حالة الحماية")
-        }, LinearLayout.LayoutParams(dp(36), dp(36)))
-
-        val statusColumn = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), 0, 0, 0)
-        }
-        statusColumn.addView(textView(tr("Protection status", "حالة الحماية"), 15f, Color.WHITE, true), wrap())
-        val statusLine = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        statusLine.addView(View(this).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(if (active) Color.rgb(67, 211, 155) else dangerRed)
-            }
-        }, LinearLayout.LayoutParams(dp(6), dp(6)))
-        statusLine.addView(textView(
-            if (active) tr("Active", "مفعّلة") else tr("Not active", "غير مفعّلة"),
-            12f, if (active) Color.rgb(67, 211, 155) else dangerRed
-        ).apply { setPadding(dp(6), 0, 0, 0) }, wrap())
-        statusColumn.addView(statusLine, wrap())
-        statusRow.addView(statusColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        protectionCard.addView(statusRow, wrap())
-
-        protectionCard.addView(primaryButton(
-            if (active) tr("Turn protection off", "إيقاف الحماية") else tr("Enable protection", "تفعيل الحماية")
-        ).apply {
-            background = getDrawable(R.drawable.bg_card_rounded)
-            setOnClickListener {
-                if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
-                    startService(Intent(this@MainActivity, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
-                } else {
-                    requestVpnAndStart()
-                }
-                root.postDelayed({ buildUi() }, 700)
-            }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply {
-            topMargin = dp(16)
-        })
-        root.addView(protectionCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(20)
-        })
-
-        val statsCard = cardLayout()
-        val statsRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        fun addStatistic(value: String, caption: String, symbol: String, color: Int) {
-            val column = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-            }
-            column.addView(textView("$symbol  $value", 18f, color, true).apply {
-                gravity = Gravity.CENTER
-            }, wrap())
-            column.addView(textView(caption, 11f, secondaryText).apply {
-                gravity = Gravity.CENTER
-                setPadding(0, dp(4), 0, 0)
-            }, wrap())
-            statsRow.addView(column, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        }
-        addStatistic(blockedCount.toString(), tr("Blocked apps", "تطبيقات محظورة"), "⊘", dangerRed)
-        statsRow.addView(View(this).apply { setBackgroundColor(dividerColor) },
-            LinearLayout.LayoutParams(dp(1), dp(32)))
-        addStatistic(selected.size.toString(), tr("Selected apps", "تطبيقات محددة"), "▦", accentBlue)
-        statsCard.addView(statsRow, wrap())
-        root.addView(statsCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(12)
-        })
-
-        fun shortcut(title: String, subtitle: String, target: String, iconRes: Int) {
-            val item = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(16), dp(16), dp(16), dp(16))
-                background = cardBackground()
-                isClickable = true
-                isFocusable = true
-                setOnClickListener { goTo(target) }
-            }
-            item.addView(ImageView(this).apply {
-                setImageResource(iconRes)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                contentDescription = title
-            }, LinearLayout.LayoutParams(dp(28), dp(28)))
-            val texts = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), 0, dp(8), 0)
-            }
-            texts.addView(textView(title, 15f, Color.WHITE, true), wrap())
-            texts.addView(textView(subtitle, 11f, secondaryText).apply {
-                setPadding(0, dp(2), 0, 0)
-            }, wrap())
-            item.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            item.addView(textView(if (arabic) "‹" else "›", 20f, Color.WHITE, true), wrap())
-            root.addView(item, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(12)
-            })
-        }
-
-        shortcut(tr("Manage applications", "إدارة التطبيقات"),
-            tr("Choose which apps can access the internet", "اختر التطبيقات التي تسمح لها بالاتصال بالإنترنت"),
-            "apps", R.drawable.ic_assaf_apps)
-        shortcut(tr("Link Check", "فحص الروابط"),
-            tr("Check a link before you open it", "تحقق من أمان أي رابط قبل فتحه"),
-            "link", R.drawable.ic_assaf_link)
-        shortcut(tr("Contact Us", "تواصل معنا"),
-            tr("Send a message directly to the owner", "أرسل رسالة مباشرة إلى مالك التطبيق"),
-            "contact", R.drawable.ic_assaf_contact)
-
-        root.addView(textView("M R .   A S S A F", 11f, Color.rgb(86, 112, 149)).apply {
-            gravity = Gravity.CENTER
-            letterSpacing = 0.25f
-            setPadding(0, dp(24), 0, dp(8))
-        }, wrap())
-
-        setContentView(scroll)
     }
 
     private fun buildTappingScreen() {
@@ -1767,4 +1619,153 @@ private class SimpleTextWatcher(private val changed: (String) -> Unit) : android
     override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
     override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { changed(s?.toString().orEmpty()) }
     override fun afterTextChanged(s: android.text.Editable?) = Unit
+}
+
+
+@Composable
+private fun AssafTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            background = ComposeColor(0xFF050B14),
+            surface = ComposeColor(0xFF0B162C)
+        ),
+        content = content
+    )
+}
+
+@Composable
+private fun MainScreen(
+    isProtectionActive: Boolean,
+    blockedCount: Int,
+    selectedCount: Int,
+    onToggleProtection: () -> Unit,
+    onManageApps: () -> Unit,
+    onCheckLinks: () -> Unit,
+    onContact: () -> Unit
+) {
+    val navy = ComposeColor(0xFF050B14)
+    val panel = ComposeColor(0xFF0B162C)
+    val muted = ComposeColor(0xFF8AA2C0)
+    val blue = ComposeColor(0xFF0084FF)
+    val green = ComposeColor(0xFF00E676)
+    val red = ComposeColor(0xFFFF5252)
+
+    Column(
+        modifier = Modifier.fillMaxSize().background(navy)
+            .verticalScroll(rememberScrollState()).padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(24.dp))
+        Image(
+            painter = painterResource(R.drawable.assaf_logo),
+            contentDescription = "ASSAF Logo",
+            modifier = Modifier.size(130.dp)
+        )
+        Text("ASSAF", color = ComposeColor.White, fontSize = 22.sp,
+            fontWeight = FontWeight.Bold, letterSpacing = 2.sp,
+            modifier = Modifier.padding(top = 8.dp))
+        Text("YOUR INTERNET. YOUR CONTROL.", color = muted,
+            fontSize = 9.sp, letterSpacing = 1.sp,
+            modifier = Modifier.padding(top = 2.dp))
+        Text("حمايتك تحت سيطرتك", color = ComposeColor.White,
+            fontSize = 18.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 24.dp))
+        Text("تحكّم باتصال تطبيقاتك بالإنترنت بسهولة", color = muted,
+            fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        Spacer(Modifier.height(16.dp))
+
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = panel)) {
+            Column(Modifier.padding(16.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(36.dp).background(
+                        if (isProtectionActive) green.copy(alpha = .2f) else red.copy(alpha = .2f),
+                        CircleShape), contentAlignment = Alignment.Center) {
+                        Surface(Modifier.size(18.dp),
+                            color = if (isProtectionActive) green else red, shape = CircleShape) {}
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("حالة الحماية", color = ComposeColor.White,
+                            fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 2.dp)) {
+                            Box(Modifier.size(6.dp).background(
+                                if (isProtectionActive) green else red, CircleShape))
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (isProtectionActive) "مفعلة" else "غير مفعلة",
+                                color = if (isProtectionActive) green else red, fontSize = 12.sp)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = onToggleProtection,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isProtectionActive) green else blue
+                    )) {
+                    Icon(Icons.Default.PowerSettingsNew, null, tint = ComposeColor.White)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (isProtectionActive) "إيقاف الحماية" else "تفعيل الحماية",
+                        color = ComposeColor.White, fontSize = 14.sp)
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = panel)) {
+            Row(Modifier.fillMaxWidth().padding(14.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(blockedCount.toString(), color = red, fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold)
+                    Text("تطبيقات محظورة", color = muted, fontSize = 11.sp)
+                }
+                Box(Modifier.width(1.dp).height(28.dp).background(ComposeColor(0xFF1B3152)))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(selectedCount.toString(), color = blue, fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold)
+                    Text("تطبيقات محددة", color = muted, fontSize = 11.sp)
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        OptionCard("إدارة التطبيقات",
+            "اختر التطبيقات التي تسمح لها بالاتصال بالإنترنت",
+            Icons.Default.GridOn, onManageApps)
+        Spacer(Modifier.height(10.dp))
+        OptionCard("فحص الروابط",
+            "تحقق من أمان أي رابط قبل فتحه",
+            Icons.Default.Link, onCheckLinks)
+        Spacer(Modifier.height(10.dp))
+        OptionCard("تواصل معنا",
+            "أرسل رسالة مباشرة إلى مالك التطبيق",
+            Icons.Default.SupportAgent, onContact)
+        Spacer(Modifier.height(20.dp))
+        Text("M R .   A S S A F", color = ComposeColor(0xFF567095),
+            fontSize = 11.sp, letterSpacing = 2.sp, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun OptionCard(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF0B162C))) {
+        Row(Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = ComposeColor(0xFF0084FF), modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = ComposeColor.White, fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold)
+                Text(subtitle, color = ComposeColor(0xFF8AA2C0), fontSize = 11.sp)
+            }
+            Icon(Icons.Default.ChevronRight, null,
+                tint = ComposeColor(0xFF8AA2C0), modifier = Modifier.size(16.dp))
+        }
+    }
 }
