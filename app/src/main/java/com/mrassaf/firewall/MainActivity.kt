@@ -1643,112 +1643,146 @@ private fun MainScreen(
     onCheckLinks: () -> Unit,
     onContact: () -> Unit
 ) {
-    val navy = ComposeColor(0xFF050B14)
-    val panel = ComposeColor(0xFF0B162C)
-    val muted = ComposeColor(0xFF8AA2C0)
-    val blue = ComposeColor(0xFF0084FF)
+    val muted = ComposeColor(0xFF7B9CC6)
+    val blue = ComposeColor(0xFF007AFF)
     val green = ComposeColor(0xFF00E676)
-    val red = ComposeColor(0xFFFF5252)
+    val panel = ComposeColor(0xFF08142A)
+    val line = ComposeColor(0xFF16325C)
 
-    Column(
-        modifier = Modifier.fillMaxSize().background(navy)
-            .verticalScroll(rememberScrollState()).padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(Modifier.height(24.dp))
-        Image(
-            painter = painterResource(id = R.drawable.ic_assaf_logo),
-            contentDescription = "Assaf Logo",
-            modifier = Modifier
-                .size(140.dp)
-                .padding(top = 8.dp)
+    Box(
+        modifier = Modifier.fillMaxSize().background(
+            androidx.compose.ui.graphics.Brush.verticalGradient(
+                listOf(ComposeColor(0xFF0A1D3A), ComposeColor(0xFF040A14), ComposeColor(0xFF010408))
+            )
         )
-        Text("ASSAF", color = ComposeColor.White, fontSize = 22.sp,
-            fontWeight = FontWeight.Bold, letterSpacing = 2.sp,
-            modifier = Modifier.padding(top = 8.dp))
-        Text("YOUR INTERNET. YOUR CONTROL.", color = muted,
-            fontSize = 9.sp, letterSpacing = 1.sp,
-            modifier = Modifier.padding(top = 2.dp))
-        Text("حمايتك تحت سيطرتك", color = ComposeColor.White,
-            fontSize = 18.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 24.dp))
-        Text("تحكّم باتصال تطبيقاتك بالإنترنت بسهولة", color = muted,
-            fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-        Spacer(Modifier.height(16.dp))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(Modifier.height(8.dp))
+            Image(
+                painter = painterResource(id = R.drawable.ic_assaf_logo),
+                contentDescription = "Assaf Logo",
+                modifier = Modifier.size(150.dp).padding(top = 4.dp)
+            )
+            Text("ASSAF", color = ComposeColor.White, fontSize = 24.sp,
+                fontWeight = FontWeight.Bold, letterSpacing = 3.sp,
+                modifier = Modifier.padding(top = 4.dp))
+            Text("YOUR INTERNET. YOUR CONTROL.", color = muted,
+                fontSize = 9.sp, letterSpacing = 1.5.sp,
+                modifier = Modifier.padding(top = 2.dp))
+            Text("حمايتك تحت سيطرتك", color = ComposeColor.White,
+                fontSize = 19.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 22.dp))
+            Text("تحكّم باتصال تطبيقاتك بالإنترنت بسهولة", color = muted,
+                fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            Spacer(Modifier.height(16.dp))
 
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = panel)) {
-            Column(Modifier.padding(16.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(36.dp).background(
-                        if (isProtectionActive) green.copy(alpha = .2f) else red.copy(alpha = .2f),
-                        CircleShape), contentAlignment = Alignment.Center) {
-                        Surface(Modifier.size(18.dp),
-                            color = if (isProtectionActive) green else red, shape = CircleShape) {}
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("حالة الحماية", color = ComposeColor.White,
-                            fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        Row(verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(top = 2.dp)) {
-                            Box(Modifier.size(6.dp).background(
-                                if (isProtectionActive) green else red, CircleShape))
-                            Spacer(Modifier.width(6.dp))
-                            Text(if (isProtectionActive) "مفعلة" else "غير مفعلة",
-                                color = if (isProtectionActive) green else red, fontSize = 12.sp)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = panel),
+                border = androidx.compose.foundation.BorderStroke(1.dp, line)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier.size(46.dp).background(ComposeColor(0xFF0F254A), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(18.dp),
+                                color = if (isProtectionActive) green else blue,
+                                shape = CircleShape
+                            ) {}
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("حالة الحماية", color = ComposeColor.White,
+                                fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Row(verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(top = 2.dp)) {
+                                Box(Modifier.size(6.dp).background(
+                                    if (isProtectionActive) green else ComposeColor(0xFFB0BEC5), CircleShape))
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (isProtectionActive) "مفعلة" else "غير مفعلة",
+                                    color = if (isProtectionActive) green else ComposeColor(0xFFB0BEC5),
+                                    fontSize = 12.sp)
+                            }
                         }
                     }
-                }
-                Spacer(Modifier.height(16.dp))
-                Button(onClick = onToggleProtection,
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isProtectionActive) green else blue
-                    )) {
-                    Icon(Icons.Default.PowerSettingsNew, null, tint = ComposeColor.White)
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (isProtectionActive) "إيقاف الحماية" else "تفعيل الحماية",
-                        color = ComposeColor.White, fontSize = 14.sp)
+                    Button(
+                        onClick = onToggleProtection,
+                        modifier = Modifier.height(44.dp),
+                        shape = RoundedCornerShape(22.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = blue)
+                    ) {
+                        Text(if (isProtectionActive) "إيقاف الحماية" else "تفعيل الحماية",
+                            color = ComposeColor.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
-        }
-        Spacer(Modifier.height(10.dp))
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = panel)) {
-            Row(Modifier.fillMaxWidth().padding(14.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(blockedCount.toString(), color = red, fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold)
-                    Text("تطبيقات محظورة", color = muted, fontSize = 11.sp)
-                }
-                Box(Modifier.width(1.dp).height(28.dp).background(ComposeColor(0xFF1B3152)))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(selectedCount.toString(), color = blue, fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold)
-                    Text("تطبيقات محددة", color = muted, fontSize = 11.sp)
+
+            Spacer(Modifier.height(10.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = panel),
+                border = androidx.compose.foundation.BorderStroke(1.dp, line)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(blockedCount.toString(), color = ComposeColor.White,
+                            fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("تطبيقات محظورة", color = muted, fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 2.dp))
+                    }
+                    Box(Modifier.width(1.dp).height(30.dp).background(line))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(selectedCount.toString(), color = ComposeColor.White,
+                            fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("تطبيقات محددة", color = muted, fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 2.dp))
+                    }
                 }
             }
+
+            Spacer(Modifier.height(10.dp))
+            OptionCard("إدارة التطبيقات",
+                "اختر التطبيقات التي تريد التحكم باتصالها بالإنترنت",
+                Icons.Default.GridOn, onManageApps)
+            Spacer(Modifier.height(10.dp))
+            OptionCard("فحص الروابط",
+                "تحقق من أمان أي رابط قبل فتحه",
+                Icons.Default.Link, onCheckLinks)
+            Spacer(Modifier.height(10.dp))
+            OptionCard("تواصل معنا",
+                "أرسل رسالة مباشرة إلى مالك التطبيق",
+                Icons.Default.SupportAgent, onContact)
+
+            Spacer(Modifier.height(24.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Box(Modifier.width(50.dp).height(1.dp).background(line))
+                Text("M R .   A S S A F", color = ComposeColor(0xFF567095),
+                    fontSize = 11.sp, letterSpacing = 2.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp))
+                Box(Modifier.width(50.dp).height(1.dp).background(line))
+            }
+            Spacer(Modifier.height(16.dp))
         }
-        Spacer(Modifier.height(10.dp))
-        OptionCard("إدارة التطبيقات",
-            "اختر التطبيقات التي تسمح لها بالاتصال بالإنترنت",
-            Icons.Default.GridOn, onManageApps)
-        Spacer(Modifier.height(10.dp))
-        OptionCard("فحص الروابط",
-            "تحقق من أمان أي رابط قبل فتحه",
-            Icons.Default.Link, onCheckLinks)
-        Spacer(Modifier.height(10.dp))
-        OptionCard("تواصل معنا",
-            "أرسل رسالة مباشرة إلى مالك التطبيق",
-            Icons.Default.SupportAgent, onContact)
-        Spacer(Modifier.height(20.dp))
-        Text("M R .   A S S A F", color = ComposeColor(0xFF567095),
-            fontSize = 11.sp, letterSpacing = 2.sp, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(8.dp))
     }
 }
 
