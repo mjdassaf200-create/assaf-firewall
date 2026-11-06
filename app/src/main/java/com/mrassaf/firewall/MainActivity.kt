@@ -913,11 +913,20 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(36), dp(36)))
         root.addView(top, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)))
 
+        root.addView(ImageView(this).apply {
+            setImageResource(R.drawable.assaf_logo)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = tr("ASSAF logo", "شعار ASSAF")
+        }, LinearLayout.LayoutParams(dp(120), dp(120)).apply {
+            topMargin = dp(14)
+            bottomMargin = dp(2)
+        })
+
         root.addView(label("ASSAF", 34f, Color.WHITE, true).apply {
             gravity = Gravity.CENTER
             letterSpacing = 0.18f
             setShadowLayer(dp(10).toFloat(), 0f, 0f, accent)
-            setPadding(0, dp(22), 0, dp(2))
+            setPadding(0, dp(4), 0, dp(2))
         }, wrap())
         root.addView(label("YOUR INTERNET. YOUR CONTROL.", 10f, gray).apply {
             gravity = Gravity.CENTER
