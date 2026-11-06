@@ -1657,9 +1657,11 @@ private fun MainScreen(
     ) {
         Spacer(Modifier.height(24.dp))
         Image(
-            painter = painterResource(R.drawable.assaf_logo),
-            contentDescription = "ASSAF Logo",
-            modifier = Modifier.size(130.dp)
+            painter = painterResource(id = R.drawable.ic_assaf_logo),
+            contentDescription = "Assaf Logo",
+            modifier = Modifier
+                .size(140.dp)
+                .padding(top = 8.dp)
         )
         Text("ASSAF", color = ComposeColor.White, fontSize = 22.sp,
             fontWeight = FontWeight.Bold, letterSpacing = 2.sp,
