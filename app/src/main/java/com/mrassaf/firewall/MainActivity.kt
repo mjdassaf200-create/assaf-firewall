@@ -1048,7 +1048,7 @@ class MainActivity : Activity() {
             "link", R.drawable.ic_assaf_link)
         shortcut(tr("Contact Us", "تواصل معنا"),
             tr("Send a message directly to the owner", "أرسل رسالة مباشرة إلى مالك التطبيق"),
-            "contact", R.drawable.ic_assaf_privacy)
+            "contact", R.drawable.ic_assaf_contact)
 
         root.addView(label("M R .  A S S A F", 12f, Color.rgb(63, 85, 119), true).apply {
             gravity = Gravity.CENTER
