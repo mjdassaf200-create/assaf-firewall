@@ -865,7 +865,7 @@ class MainActivity : Activity() {
         val cardBg = Color.rgb(4, 24, 53)
         val accent = Color.rgb(30, 136, 229)
         val border = Color.rgb(10, 42, 90)
-        val gray = Color.rgb(153, 255, 255, 255)
+        val gray = Color.argb(153, 255, 255, 255)
 
         fun makeCard(): LinearLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
