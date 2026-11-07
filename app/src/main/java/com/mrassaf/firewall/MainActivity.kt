@@ -460,6 +460,76 @@ class MainActivity : ComponentActivity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
     }
 
+    private fun showAccountDialog() {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        val emailInput = EditText(this).apply {
+            hint = tr("Email address", "البريد الإلكتروني")
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            setSingleLine(true)
+        }
+        val passwordInput = EditText(this).apply {
+            hint = tr("Password (10+ characters for new accounts)", "كلمة المرور (10 أحرف على الأقل للحساب الجديد)")
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        val registerCheck = CheckBox(this).apply {
+            text = tr("Create a new account", "إنشاء حساب جديد")
+            setTextColor(white)
+        }
+        form.addView(emailInput, wrap())
+        form.addView(passwordInput, wrap())
+        form.addView(registerCheck, wrap())
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle(tr("ASSAF Cloud Account", "حساب ASSAF السحابي"))
+            .setView(form)
+            .setNegativeButton(tr("Cancel", "إلغاء"), null)
+            .setPositiveButton(tr("Continue", "متابعة"), null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val email = emailInput.text.toString().trim()
+                val password = passwordInput.text.toString()
+                if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    emailInput.error = tr("Enter a valid email", "أدخل بريدًا إلكترونيًا صحيحًا")
+                    return@setOnClickListener
+                }
+                if (password.length < if (registerCheck.isChecked) 10 else 1) {
+                    passwordInput.error = tr("Password is too short", "كلمة المرور قصيرة")
+                    return@setOnClickListener
+                }
+                cloudStatusText.text = tr("Connecting securely…", "جارٍ الاتصال بشكل آمن…")
+                dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
+                Thread {
+                    val result = runCatching {
+                        AssafApiClient.authenticate(email, password, registerCheck.isChecked)
+                    }
+                    runOnUiThread {
+                        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
+                        result.onSuccess { token ->
+                            prefs.edit().putString(KEY_API_TOKEN, token).putString(KEY_ACCOUNT_EMAIL, email).apply()
+                            refreshBanStatus()
+                            cloudStatusText.text = tr("Signed in • Cloud sync ready", "تم تسجيل الدخول • المزامنة السحابية جاهزة")
+                            Toast.makeText(this, tr("ASSAF account connected", "تم ربط حساب ASSAF"), Toast.LENGTH_LONG).show()
+                            dialog.dismiss()
+                            syncCloudSettingChanges()
+                        }.onFailure {
+                            cloudStatusText.text = tr("Sign-in failed", "فشل تسجيل الدخول")
+                            android.app.AlertDialog.Builder(this)
+                                .setTitle(tr("Could not connect", "تعذر الاتصال"))
+                                .setMessage(it.message ?: tr("Please try again.", "حاول مرة أخرى."))
+                                .setPositiveButton(tr("OK", "حسنًا"), null).show()
+                        }
+                    }
+                }.start()
+            }
+        }
+        dialog.show()
+    }
+
+
     private fun buildShieldScreen() {
         val root = pageRoot(tr("ASSAF Shield", "درع عساف"))
         root.addView(infoCard(tr(
