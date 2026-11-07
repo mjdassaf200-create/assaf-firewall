@@ -46,7 +46,7 @@
             android:textColor="#FFFFFF"
             android:textSize="11sp" />
 
-        <androidx.appcompat.widget.SwitchCompat
+        <Switch
             android:id="@+id/switchAppControl"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
