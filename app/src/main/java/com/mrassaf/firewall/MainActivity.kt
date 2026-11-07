@@ -968,52 +968,93 @@ class MainActivity : ComponentActivity() {
         }, wrap())
     }
 
-        // Separate app screen: only the six requested apps appear here.
+    // Applications screen redesigned from the supplied ASSAF layout.
+    // It reuses the existing FirewallVpnService to avoid creating a second VPN.
     private fun buildAppsScreen() {
         val scroll = ScrollView(this).apply {
             setFillViewport(true)
-            setBackgroundResource(R.drawable.assaf_main_interface)
+            setBackgroundColor(Color.rgb(5, 11, 20))
             isVerticalScrollBarEnabled = false
-            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(24))
-            setBackgroundResource(R.drawable.assaf_background)
+            setPadding(dp(16), dp(20), dp(16), dp(24))
+            setBackgroundColor(Color.rgb(5, 11, 20))
             layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
         scroll.addView(root)
 
-        val top = LinearLayout(this).apply {
+        val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
-        top.addView(smallButton().apply {
-            text = tr("← Back", "رجوع ←")
-            setOnClickListener {
-                currentScreen = "home"
-                buildUi()
-            }
-        }, LinearLayout.LayoutParams(dp(100), dp(44)))
-        top.addView(TextView(this).apply {
-            text = tr("YOUR APPLICATIONS", "التطبيقات")
-            textSize = 17f
+        header.addView(smallButton().apply {
+            text = tr("Menu", "القائمة")
+            setOnClickListener { goTo("home") }
+        }, LinearLayout.LayoutParams(dp(64), dp(38)))
+        val brand = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+        }
+        brand.addView(TextView(this).apply {
+            text = "ASSAF"
+            textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setTextColor(white)
-            setPadding(dp(8), 0, dp(8), 0)
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        root.addView(top, wrap())
+        }, wrap())
+        brand.addView(TextView(this).apply {
+            text = "YOUR INTERNET. YOUR CONTROL."
+            textSize = 9f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(0, 210, 255))
+        }, wrap())
+        header.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(View(this), LinearLayout.LayoutParams(dp(64), dp(1)))
+        root.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
 
-        statusText = TextView(this).apply {
-            textSize = 13f
-            setTextColor(white)
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            background = rounded(panel, 14)
+        val statusCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = rounded(Color.rgb(10, 24, 46), 16)
         }
-        val statusParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        statusParams.topMargin = dp(14)
-        root.addView(statusText, statusParams)
+        val statusIcon = TextView(this).apply {
+            text = "✓"
+            textSize = 30f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(0, 255, 135))
+        }
+        statusCard.addView(statusIcon, LinearLayout.LayoutParams(dp(50), dp(50)))
+        val statusColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        statusColumn.addView(TextView(this).apply {
+            text = tr("Protection status", "حالة الحماية")
+            textSize = 17f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(white)
+        }, wrap())
+        statusText = TextView(this).apply {
+            textSize = 12f
+            setTextColor(muted)
+        }
+        statusColumn.addView(statusText, wrap())
+        statusCard.addView(statusColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(12)
+        })
+        root.addView(statusCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(16)
+            bottomMargin = dp(18)
+        })
+
+        root.addView(TextView(this).apply {
+            text = tr("Manage applications", "إدارة التطبيقات")
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(white)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
 
         val modeRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1021,403 +1062,150 @@ class MainActivity : ComponentActivity() {
         }
         fun addModeOption(title: String, subtitle: String, modeValue: Int) {
             val selectedMode = prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL)
-            val option = TextView(this).apply {
-                text = "$title\n$subtitle"
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
+            val chosen = selectedMode == modeValue
+            val option = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setTextColor(white)
-                setPadding(dp(8), dp(12), dp(8), dp(12))
+                setPadding(dp(8), dp(10), dp(8), dp(10))
                 background = GradientDrawable().apply {
-                    setColor(if (selectedMode == modeValue) Color.rgb(5, 82, 176) else panel)
-                    cornerRadius = dp(18).toFloat()
-                    setStroke(dp(if (selectedMode == modeValue) 2 else 1),
-                        if (selectedMode == modeValue) blue else Color.rgb(48, 78, 119))
+                    setColor(if (chosen) Color.rgb(10, 35, 62) else Color.TRANSPARENT)
+                    cornerRadius = dp(12).toFloat()
+                    setStroke(dp(if (chosen) 2 else 1), if (chosen) Color.rgb(0, 229, 255) else Color.rgb(35, 53, 75))
                 }
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
                     if (prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL) != modeValue) {
                         prefs.edit().putInt(FirewallVpnService.KEY_CONTROL_MODE, modeValue).apply()
-                        if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
-                            val serviceIntent = Intent(this@MainActivity, FirewallVpnService::class.java)
-                                .setAction(FirewallVpnService.ACTION_START)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
-                        }
+                        if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) requestVpnAndStart()
                         buildUi()
-                        Toast.makeText(this@MainActivity,
-                            tr("Control mode changed", "تم تغيير وضع التحكم"), Toast.LENGTH_SHORT).show()
                     }
                 }
             }
-            modeRow.addView(option, LinearLayout.LayoutParams(0, dp(76), 1f).apply {
-                marginStart = dp(4)
-                marginEnd = dp(4)
+            option.addView(TextView(this).apply {
+                text = title
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(if (chosen) Color.rgb(0, 229, 255) else muted)
+            }, wrap())
+            option.addView(TextView(this).apply {
+                text = subtitle
+                textSize = 9f
+                gravity = Gravity.CENTER
+                setTextColor(if (chosen) Color.rgb(0, 229, 255) else muted)
+            }, wrap())
+            modeRow.addView(option, LinearLayout.LayoutParams(0, dp(68), 1f).apply {
+                marginStart = dp(5)
+                marginEnd = dp(5)
             })
         }
-        addModeOption(tr("Individual control", "التحكم الفردي"),
-            tr("Block selected apps", "افصل التطبيقات المحددة"), FirewallVpnService.MODE_INDIVIDUAL)
         addModeOption(tr("Exceptions mode", "وضع الاستثناءات"),
-            tr("Allow selected apps only", "اسمح للتطبيقات المحددة فقط"), FirewallVpnService.MODE_EXCEPTIONS)
-        root.addView(modeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(80)).apply {
-            topMargin = dp(12)
-            bottomMargin = dp(4)
+            tr("Allow selected apps", "اسمح للتطبيقات المحددة"), FirewallVpnService.MODE_EXCEPTIONS)
+        addModeOption(tr("Individual control", "التحكم الفردي"),
+            tr("Block selected apps", "افصل تطبيقات محددة"), FirewallVpnService.MODE_INDIVIDUAL)
+        root.addView(modeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(74)).apply {
+            topMargin = dp(10)
+            bottomMargin = dp(8)
         })
 
         countText = TextView(this).apply {
-            textSize = 12f
+            textSize = 11f
             setTextColor(muted)
-            setPadding(0, dp(14), 0, dp(4))
+            setPadding(dp(4), dp(6), dp(4), dp(6))
         }
         root.addView(countText, wrap())
 
         searchBox = EditText(this).apply {
-            hint = tr("Search installed apps", "ابحث في تطبيقات الهاتف")
+            hint = tr("Search installed apps", "ابحث في التطبيقات")
             setSingleLine(true)
             textSize = 14f
             setTextColor(white)
             setHintTextColor(muted)
-            background = rounded(panel, 13)
+            background = rounded(Color.rgb(13, 31, 56), 12)
             setPadding(dp(14), dp(10), dp(14), dp(10))
-            addTextChangedListener(SimpleTextWatcher { query ->
-                if (query.isNotBlank() && !showAllApps) {
-                    showAllApps = true
-                    loadApps()
-                }
-                filterApps(query)
-            })
+            addTextChangedListener(SimpleTextWatcher { filterApps(it) })
         }
-        val searchParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        searchParams.topMargin = dp(10)
-        root.addView(searchBox, searchParams)
+        root.addView(searchBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply {
+            bottomMargin = dp(10)
+        })
 
         listContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(14), 0, dp(4))
+            setPadding(0, dp(2), 0, dp(8))
         }
         root.addView(listContainer, wrap())
-
-        root.addView(primaryButton(tr("Apply & start protection", "تطبيق وبدء الحماية")).apply {
-            setOnClickListener { requestVpnAndStart() }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
-
-        root.addView(smallButton().apply {
-            text = tr("Turn firewall off", "إيقاف جدار الحماية")
-            setOnClickListener {
-                startService(Intent(this@MainActivity, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
-                statusText.text = tr("Firewall stop requested", "تم طلب إيقاف الحجب")
-            }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
-
         setContentView(scroll)
     }
 
-    private fun showAccountDialog() {
-        val form = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), 0)
-        }
-        val emailInput = EditText(this).apply {
-            hint = tr("Email address", "البريد الإلكتروني")
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-            setSingleLine(true)
-        }
-        val passwordInput = EditText(this).apply {
-            hint = tr("Password (10+ characters for new accounts)", "كلمة المرور (10 أحرف على الأقل للحساب الجديد)")
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setSingleLine(true)
-        }
-        val registerCheck = CheckBox(this).apply {
-            text = tr("Create a new account", "إنشاء حساب جديد")
-            setTextColor(white)
-        }
-        form.addView(emailInput, wrap())
-        form.addView(passwordInput, wrap())
-        form.addView(registerCheck, wrap())
-        val dialog = android.app.AlertDialog.Builder(this)
-            .setTitle(tr("ASSAF Cloud Account", "حساب ASSAF السحابي"))
-            .setView(form)
-            .setNegativeButton(tr("Cancel", "إلغاء"), null)
-            .setPositiveButton(tr("Continue", "متابعة"), null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val email = emailInput.text.toString().trim()
-                val password = passwordInput.text.toString()
-                if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                    emailInput.error = tr("Enter a valid email", "أدخل بريدًا إلكترونيًا صحيحًا")
-                    return@setOnClickListener
-                }
-                if (password.length < if (registerCheck.isChecked) 10 else 1) {
-                    passwordInput.error = tr("Password is too short", "كلمة المرور قصيرة")
-                    return@setOnClickListener
-                }
-                cloudStatusText.text = tr("Connecting securely…", "جارٍ الاتصال بشكل آمن…")
-                dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
-                Thread {
-                    val result = runCatching {
-                        AssafApiClient.authenticate(email, password, registerCheck.isChecked)
-                    }
-                    runOnUiThread {
-                        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
-                        result.onSuccess { token ->
-                            prefs.edit().putString(KEY_API_TOKEN, token).putString(KEY_ACCOUNT_EMAIL, email).apply()
-                            refreshBanStatus()
-                            cloudStatusText.text = tr("Signed in • Cloud sync ready", "تم تسجيل الدخول • المزامنة السحابية جاهزة")
-                            Toast.makeText(this, tr("ASSAF account connected", "تم ربط حساب ASSAF"), Toast.LENGTH_LONG).show()
-                            dialog.dismiss()
-                            syncCloudSettingChanges()
-                        }.onFailure {
-                            cloudStatusText.text = tr("Sign-in failed", "فشل تسجيل الدخول")
-                            android.app.AlertDialog.Builder(this)
-                                .setTitle(tr("Could not connect", "تعذر الاتصال"))
-                                .setMessage(it.message ?: tr("Please try again.", "حاول مرة أخرى."))
-                                .setPositiveButton(tr("OK", "حسنًا"), null).show()
-                        }
-                    }
-                }.start()
-            }
-        }
-        dialog.show()
-    }
-
-    private fun syncCloudSettingChanges() {
-        if (prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL) != FirewallVpnService.MODE_INDIVIDUAL) return
-        val token = prefs.getString(KEY_API_TOKEN, null) ?: return
-        val localSelected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty().toSet()
-        Thread {
-            val result = runCatching {
-                val remote = AssafApiClient.listSettings(token)
-                val remoteSettings = mutableMapOf<String, Boolean>()
-                for (i in 0 until remote.length()) {
-                    val item = remote.optJSONObject(i) ?: continue
-                    val packageName = item.optString("package_name")
-                    if (packageName.isNotBlank()) remoteSettings[packageName] = item.optBoolean("blocked", false)
-                }
-
-                val installedLaunchable = packageManager.getInstalledApplications(0)
-                    .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null && it.packageName != packageName }
-                    .map { it.packageName }
-                    .toSet()
-                val merged = localSelected.filter { it in installedLaunchable }.toMutableSet()
-
-                // Cloud values restore settings on this device; only apply packages installed here.
-                remoteSettings.forEach { (pkg, blocked) ->
-                    if (pkg in installedLaunchable) {
-                        if (blocked) merged.add(pkg) else merged.remove(pkg)
-                    }
-                }
-
-                // Upload local selections that have never been saved to the account.
-                merged.filter { it in installedLaunchable && it !in remoteSettings }
-                    .forEach { AssafApiClient.saveSetting(token, it, true) }
-
-                val savedCount = AssafApiClient.listSettings(token).length()
-                Pair(merged, savedCount)
-            }
-            runOnUiThread {
-                result.onSuccess { (merged, count) ->
-                    prefs.edit().putStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, merged).apply()
-                    loadApps()
-                    if (prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
-                        if (merged.isEmpty()) {
-                            startService(Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
-                        } else {
-                            val serviceIntent = Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_START)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
-                        }
-                    }
-                    cloudStatusText.text = tr("Cloud connected • $count settings synced", "السحابة متصلة • تمت مزامنة $count إعدادات")
-                }.onFailure {
-                    cloudStatusText.text = tr("Signed in • Sync needs retry", "تم تسجيل الدخول • تحتاج المزامنة لإعادة المحاولة")
-                }
-            }
-        }.start()
-    }
-
     private fun loadApps() {
+        if (!::listContainer.isInitialized || !::statusText.isInitialized || !::countText.isInitialized) return
         listContainer.removeAllViews()
         appRows.clear()
         val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
         val mode = prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL)
-        val favorites = prefs.getStringSet(KEY_FAVORITE_APPS, emptySet()).orEmpty().toSet()
-
         val installedApps = packageManager.getInstalledApplications(0)
             .filter { it.packageName != packageName && packageManager.getLaunchIntentForPackage(it.packageName) != null }
             .map { info ->
-                val label = runCatching { packageManager.getApplicationLabel(info).toString() }
-                    .getOrDefault(info.packageName)
+                val label = runCatching { packageManager.getApplicationLabel(info).toString() }.getOrDefault(info.packageName)
                 Triple(info, label, info.packageName)
             }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.second })
 
-        val favoriteApps = installedApps.filter { it.third in favorites }
-        val otherApps = installedApps.filter { it.third !in favorites }
-
-        fun addHeading(title: String) {
-            listContainer.addView(TextView(this).apply {
-                text = title
-                textSize = 14f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(blue)
-                setPadding(dp(4), dp(10), dp(4), dp(10))
-            }, wrap())
-        }
-
-        fun renderApps(apps: List<Triple<android.content.pm.ApplicationInfo, String, String>>) {
-            apps.forEachIndexed { index, item ->
-                val info = item.first
-                val label = item.second
-                val pkg = item.third
-                val tileRow = if (index % 3 == 0) {
-                    LinearLayout(this).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.TOP
-                        layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
-                    }.also { row ->
-                        listContainer.addView(row, LinearLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-                        ).apply { bottomMargin = dp(9) })
-                    }
-                } else listContainer.getChildAt(listContainer.childCount - 1) as? LinearLayout
-
-                val isBlocked = if (mode == FirewallVpnService.MODE_INDIVIDUAL) pkg in selected else pkg !in selected
-                val isFavorite = pkg in favorites
-                val tile = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
-                    gravity = Gravity.CENTER
-                    setPadding(dp(6), dp(8), dp(6), dp(8))
-                    background = rounded(if (isBlocked) Color.rgb(55, 34, 49) else panel, 16)
-                    isClickable = true
-                    isFocusable = true
-                    contentDescription = label
-                }
-
-                val favoriteButton = TextView(this).apply {
-                    text = if (isFavorite) "★" else "☆"
-                    textSize = 22f
-                    gravity = Gravity.CENTER
-                    setTextColor(if (isFavorite) Color.rgb(255, 205, 75) else muted)
-                    contentDescription = if (isFavorite) tr("Remove from favorites", "إزالة من المفضلة") else tr("Add to favorites", "أضف إلى المفضلة")
-                    setOnClickListener {
-                        val updated = prefs.getStringSet(KEY_FAVORITE_APPS, emptySet()).orEmpty().toMutableSet()
-                        if (pkg in updated) {
-                            updated.remove(pkg)
-                        } else if (updated.size < 4) {
-                            updated.add(pkg)
-                        } else {
-                            Toast.makeText(this@MainActivity, tr("You can add up to 4 favorite apps", "المفضلة تستوعب 4 تطبيقات فقط"), Toast.LENGTH_SHORT).show()
-                            return@setOnClickListener
-                        }
-                        prefs.edit().putStringSet(KEY_FAVORITE_APPS, updated).apply()
-                        loadApps()
-                    }
-                }
-                tile.addView(favoriteButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(27)))
-
-                val iconView = ImageView(this).apply {
-                    val drawable = runCatching { packageManager.getApplicationIcon(info) }.getOrNull()
-                    if (drawable != null) setImageDrawable(drawable)
-                    else setImageDrawable(GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(blue)
+        installedApps.forEachIndexed { index, item ->
+            val info = item.first
+            val label = item.second
+            val pkg = item.third
+            val isBlocked = if (mode == FirewallVpnService.MODE_INDIVIDUAL) pkg in selected else pkg !in selected
+            var tileRow: LinearLayout? = if (index % 3 == 0) {
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.TOP
+                    layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+                }.also { row ->
+                    listContainer.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                        bottomMargin = dp(8)
                     })
-                    scaleType = ImageView.ScaleType.FIT_CENTER
                 }
-                tile.addView(iconView, LinearLayout.LayoutParams(dp(46), dp(46)))
-                tile.addView(TextView(this).apply {
-                    text = label
-                    textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
-                    gravity = Gravity.CENTER
-                    setTextColor(white)
-                    maxLines = 2
-                    ellipsize = android.text.TextUtils.TruncateAt.END
-                    setPadding(0, dp(5), 0, dp(3))
-                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
-                tile.addView(TextView(this).apply {
-                    text = if (isBlocked) tr("BLOCKED", "مفصول") else tr("ALLOWED", "متصل")
-                    textSize = 9f
-                    typeface = Typeface.DEFAULT_BOLD
-                    gravity = Gravity.CENTER
-                    setTextColor(if (isBlocked) Color.rgb(255, 153, 153) else green)
-                }, wrap())
+            } else listContainer.getChildAt(listContainer.childCount - 1) as? LinearLayout
 
-                tile.setOnClickListener { confirmAppConnection(pkg, label) }
-                tileRow?.addView(tile, LinearLayout.LayoutParams(0, dp(144), 1f).apply {
-                    marginStart = dp(4)
-                    marginEnd = dp(4)
-                })
-                appRows.add(pkg to tile)
-            }
-        }
-
-        addHeading(tr("FAVORITES • 4 SLOTS", "المفضلة • 4 خانات ★"))
-        val slotsRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
-        }
-        repeat(4) { slotIndex ->
-            val favorite = favoriteApps.getOrNull(slotIndex)
-            val slot = LinearLayout(this).apply {
+            val tile = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(3), dp(8), dp(3), dp(8))
-                background = rounded(panel, 12)
+                setPadding(dp(7), dp(10), dp(7), dp(8))
+                background = rounded(Color.rgb(13, 31, 56), 12)
             }
-            if (favorite == null) {
-                slot.addView(TextView(this).apply {
-                    text = "+"
-                    textSize = 24f
-                    gravity = Gravity.CENTER
-                    setTextColor(muted)
-                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)))
-                slot.addView(TextView(this).apply {
-                    text = tr("Add app", "أضف تطبيق")
-                    textSize = 10f
-                    gravity = Gravity.CENTER
-                    setTextColor(muted)
-                }, wrap())
-            } else {
-                val info = favorite.first
-                val pkg = favorite.third
-                slot.addView(ImageView(this).apply {
-                    setImageDrawable(runCatching { packageManager.getApplicationIcon(info) }.getOrNull())
-                    scaleType = ImageView.ScaleType.FIT_CENTER
-                }, LinearLayout.LayoutParams(dp(38), dp(38)))
-                slot.addView(TextView(this).apply {
-                    text = favorite.second
-                    textSize = 10f
-                    gravity = Gravity.CENTER
-                    setTextColor(white)
-                    maxLines = 1
-                    ellipsize = android.text.TextUtils.TruncateAt.END
-                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(22)))
-                slot.setOnClickListener { confirmAppConnection(pkg, favorite.second) }
+            val icon = ImageView(this).apply {
+                setImageDrawable(runCatching { packageManager.getApplicationIcon(info) }.getOrNull())
+                scaleType = ImageView.ScaleType.FIT_CENTER
             }
-            slotsRow.addView(slot, LinearLayout.LayoutParams(0, dp(76), 1f).apply {
-                marginStart = dp(3)
-                marginEnd = dp(3)
-            })
-        }
-        listContainer.addView(slotsRow, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(8) })
-        addHeading(tr("ALL APPLICATIONS", "كل التطبيقات"))
-        val visibleApps = if (showAllApps) otherApps else otherApps.take(6)
-        renderApps(visibleApps)
-        if (otherApps.size > 6) {
-            listContainer.addView(smallButton().apply {
-                text = if (showAllApps) tr("Show fewer apps", "عرض عدد أقل") else tr("Show all ${otherApps.size} apps", "عرض كل التطبيقات (${otherApps.size})")
-                setOnClickListener {
-                    showAllApps = !showAllApps
-                    loadApps()
+            tile.addView(icon, LinearLayout.LayoutParams(dp(42), dp(42)))
+            tile.addView(TextView(this).apply {
+                text = label
+                textSize = 11f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(white)
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
+            val appSwitch = android.widget.Switch(this).apply {
+                text = if (isBlocked) tr("Disconnected", "مفصول") else tr("Connected", "متصل")
+                textSize = 9f
+                setTextColor(if (isBlocked) Color.rgb(255, 100, 100) else Color.rgb(0, 230, 135))
+                isChecked = isBlocked
+                scaleX = 0.88f
+                scaleY = 0.88f
+                setOnCheckedChangeListener { _, checked ->
+                    applyAppBlockState(pkg, label, checked)
                 }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply {
-                topMargin = dp(8)
-                bottomMargin = dp(8)
+            }
+            tile.addView(appSwitch, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)))
+            tileRow?.addView(tile, LinearLayout.LayoutParams(0, dp(142), 1f).apply {
+                marginStart = dp(4)
+                marginEnd = dp(4)
             })
+            appRows.add(pkg to tile)
         }
 
         if (installedApps.isEmpty()) {
@@ -1429,58 +1217,46 @@ class MainActivity : ComponentActivity() {
                 setPadding(dp(12), dp(24), dp(12), dp(24))
             }, wrap())
         }
-
         val selectionDescription = if (mode == FirewallVpnService.MODE_INDIVIDUAL)
-            tr("selected to block", "محددة للفصل") else tr("allowed exceptions", "تطبيقات مستثناة")
+            tr("apps selected to block", "تطبيقات محددة للفصل") else tr("allowed exceptions", "تطبيقات مستثناة")
         countText.text = tr(
-            "${installedApps.size} apps found • ${favoriteApps.size} favorites • ${selected.size} $selectionDescription",
-            "التطبيقات: ${installedApps.size} • المفضلة: ${favoriteApps.size} • ${selected.size} $selectionDescription"
+            "${installedApps.size} apps found • ${selected.size} ${selectionDescription}",
+            "التطبيقات: ${installedApps.size} • ${selected.size} ${selectionDescription}"
         )
         val firewallActive = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
         statusText.text = if (firewallActive) {
-            tr("Protection is active • ${selected.size} $selectionDescription", "الحماية تعمل • ${selected.size} $selectionDescription")
+            tr("Protection is active • ${selected.size} ${selectionDescription}", "الحماية مفعلة • ${selected.size} ${selectionDescription}")
         } else {
-            tr("Choose apps, then start protection.", "اختر التطبيقات ثم فعّل الحماية.")
+            tr("Protection is off", "الحماية غير مفعلة")
         }
     }
 
-    private fun confirmAppConnection(packageName: String, appName: String) {
+    private fun applyAppBlockState(packageName: String, appName: String, shouldBlock: Boolean) {
         val mode = prefs.getInt(FirewallVpnService.KEY_CONTROL_MODE, FirewallVpnService.MODE_INDIVIDUAL)
         val selected = prefs.getStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
-        val blocked = if (mode == FirewallVpnService.MODE_INDIVIDUAL) packageName in selected else packageName !in selected
-        val title = if (blocked) tr("Restore internet connection?", "إعادة الإنترنت؟")
-                    else tr("Stop internet connection?", "فصل الإنترنت؟")
-        val message = if (blocked) tr("Allow $appName to access the internet again?", "هل تريد السماح لتطبيق $appName بالاتصال بالإنترنت من جديد؟")
-                      else tr("Block internet access for $appName?", "هل تريد فصل الإنترنت عن تطبيق $appName؟")
-        android.app.AlertDialog.Builder(this)
-            .setTitle(title)
-            .setMessage(message)
-            .setNegativeButton(tr("Cancel", "إلغاء"), null)
-            .setPositiveButton(if (blocked) tr("Reconnect", "معاودة الاتصال") else tr("Block internet", "إيقاف الاتصال")) { _, _ ->
-                val updated = selected.toMutableSet()
-                if (mode == FirewallVpnService.MODE_INDIVIDUAL) {
-                    if (blocked) updated.remove(packageName) else updated.add(packageName)
-                } else {
-                    if (blocked) updated.add(packageName) else updated.remove(packageName)
-                }
-                prefs.edit().putStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, updated).apply()
-                if (mode == FirewallVpnService.MODE_INDIVIDUAL) {
-                    prefs.getString(KEY_API_TOKEN, null)?.let { token ->
-                        Thread { runCatching { AssafApiClient.saveSetting(token, packageName, !blocked) } }.start()
-                    }
-                }
-                loadApps()
-                if (mode == FirewallVpnService.MODE_INDIVIDUAL && updated.isEmpty()) {
-                    startService(Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
-                } else if (mode == FirewallVpnService.MODE_EXCEPTIONS || !blocked ||
-                    prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)) {
-                    requestVpnAndStart()
-                }
-                val toastText = if (blocked) tr("Internet connection restored for $appName", "تمت معاودة اتصال $appName بالإنترنت")
-                                 else tr("Internet blocking requested for $appName", "تم طلب فصل الإنترنت عن $appName")
-                Toast.makeText(this, toastText, Toast.LENGTH_LONG).show()
+        val updated = selected.toMutableSet()
+        if (mode == FirewallVpnService.MODE_INDIVIDUAL) {
+            if (shouldBlock) updated.add(packageName) else updated.remove(packageName)
+        } else {
+            if (shouldBlock) updated.remove(packageName) else updated.add(packageName)
+        }
+        prefs.edit().putStringSet(FirewallVpnService.KEY_BLOCKED_PACKAGES, updated).apply()
+        if (mode == FirewallVpnService.MODE_INDIVIDUAL) {
+            prefs.getString(KEY_API_TOKEN, null)?.let { token ->
+                Thread { runCatching { AssafApiClient.saveSetting(token, packageName, shouldBlock) } }.start()
             }
-            .show()
+        }
+        if (mode == FirewallVpnService.MODE_INDIVIDUAL && updated.isEmpty()) {
+            startService(Intent(this, FirewallVpnService::class.java).setAction(FirewallVpnService.ACTION_STOP))
+        } else {
+            requestVpnAndStart()
+        }
+        loadApps()
+        Toast.makeText(this,
+            if (shouldBlock) tr("Internet blocked for $appName", "تم فصل الإنترنت عن $appName")
+            else tr("Internet restored for $appName", "تمت إعادة الإنترنت إلى $appName"),
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun filterApps(query: String) {
