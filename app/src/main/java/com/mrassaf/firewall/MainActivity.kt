@@ -1301,7 +1301,7 @@ class MainActivity : ComponentActivity() {
             val icon = tile.findViewById<ImageView>(R.id.imgAppIcon)
             val name = tile.findViewById<TextView>(R.id.tvAppName)
             val appStatus = tile.findViewById<TextView>(R.id.tvAppStatus)
-            val appSwitch = tile.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switchAppControl)
+            val appSwitch = tile.findViewById<android.widget.Switch>(R.id.switchAppControl)
 
             icon.setImageDrawable(runCatching { packageManager.getApplicationIcon(info) }.getOrNull())
             name.text = label
