@@ -1281,51 +1281,47 @@ class MainActivity : ComponentActivity() {
             val label = item.second
             val pkg = item.third
             val isBlocked = if (mode == FirewallVpnService.MODE_INDIVIDUAL) pkg in selected else pkg !in selected
-            var tileRow: LinearLayout? = if (index % 3 == 0) {
+
+            val tileRow: LinearLayout = if (index % 3 == 0) {
                 LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.TOP
                     layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
                 }.also { row ->
-                    listContainer.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                        bottomMargin = dp(8)
-                    })
+                    listContainer.addView(row, LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply { bottomMargin = dp(8) })
                 }
-            } else listContainer.getChildAt(listContainer.childCount - 1) as? LinearLayout
+            } else {
+                listContainer.getChildAt(listContainer.childCount - 1) as LinearLayout
+            }
 
-            val tile = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(7), dp(10), dp(7), dp(8))
-                background = rounded(Color.rgb(13, 31, 56), 12)
+            val tile = layoutInflater.inflate(R.layout.item_app_control, tileRow, false) as LinearLayout
+            val icon = tile.findViewById<ImageView>(R.id.imgAppIcon)
+            val name = tile.findViewById<TextView>(R.id.tvAppName)
+            val appStatus = tile.findViewById<TextView>(R.id.tvAppStatus)
+            val appSwitch = tile.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switchAppControl)
+
+            icon.setImageDrawable(runCatching { packageManager.getApplicationIcon(info) }.getOrNull())
+            name.text = label
+            appStatus.text = if (isBlocked) tr("Disconnected", "مفصول") else tr("Connected", "متصل")
+            appStatus.setBackgroundResource(
+                if (isBlocked) R.drawable.bg_button_red else R.drawable.bg_status_connected
+            )
+            if (isBlocked) {
+                appStatus.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
+            } else {
+                appStatus.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_check_small, 0, 0, 0)
             }
-            val icon = ImageView(this).apply {
-                setImageDrawable(runCatching { packageManager.getApplicationIcon(info) }.getOrNull())
-                scaleType = ImageView.ScaleType.FIT_CENTER
+
+            appSwitch.setOnCheckedChangeListener(null)
+            appSwitch.isChecked = isBlocked
+            appSwitch.setOnCheckedChangeListener { _, checked ->
+                applyAppBlockState(pkg, label, checked)
             }
-            tile.addView(icon, LinearLayout.LayoutParams(dp(42), dp(42)))
-            tile.addView(TextView(this).apply {
-                text = label
-                textSize = 11f
-                typeface = Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-                setTextColor(white)
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
-            val appSwitch = android.widget.Switch(this).apply {
-                text = if (isBlocked) tr("Disconnected", "مفصول") else tr("Connected", "متصل")
-                textSize = 9f
-                setTextColor(if (isBlocked) Color.rgb(255, 100, 100) else Color.rgb(0, 230, 135))
-                isChecked = isBlocked
-                scaleX = 0.88f
-                scaleY = 0.88f
-                setOnCheckedChangeListener { _, checked ->
-                    applyAppBlockState(pkg, label, checked)
-                }
-            }
-            tile.addView(appSwitch, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)))
-            tileRow?.addView(tile, LinearLayout.LayoutParams(0, dp(142), 1f).apply {
+
+            tileRow.addView(tile, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
                 marginStart = dp(4)
                 marginEnd = dp(4)
             })
