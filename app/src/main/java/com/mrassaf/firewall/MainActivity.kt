@@ -70,6 +70,7 @@ import java.util.UUID
 class MainActivity : ComponentActivity() {
     private lateinit var listContainer: LinearLayout
     private lateinit var statusText: TextView
+    private lateinit var statusTitle: TextView
     private lateinit var statsText: TextView
     private lateinit var searchBox: EditText
     private lateinit var scheduleCheck: CheckBox
@@ -1097,36 +1098,40 @@ class MainActivity : ComponentActivity() {
     private fun buildAppsScreen() {
         val scroll = ScrollView(this).apply {
             setFillViewport(true)
-            setBackgroundColor(Color.rgb(3, 10, 27))
+            setBackgroundColor(Color.rgb(2, 8, 22))
             isVerticalScrollBarEnabled = false
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(22))
-            setBackgroundColor(Color.rgb(5, 11, 20))
+            setPadding(dp(12), dp(8), dp(12), dp(20))
+            setBackgroundColor(Color.rgb(2, 8, 22))
             layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
         scroll.addView(root)
 
+        // ASSAF brand header
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
         header.addView(smallButton().apply {
-            text = tr("Menu", "القائمة")
+            text = "☰"
+            textSize = 24f
+            background = rounded(Color.TRANSPARENT, 12)
             setOnClickListener { goTo("home") }
-        }, LinearLayout.LayoutParams(dp(64), dp(38)))
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
         brand.addView(TextView(this).apply {
             text = "🛡  ASSAF"
-            textSize = 25f
-            typeface = Typeface.DEFAULT_BOLD
+            textSize = 27f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
             gravity = Gravity.CENTER
-            setTextColor(white)
+            setTextColor(Color.WHITE)
+            letterSpacing = 0.04f
         }, wrap())
         brand.addView(TextView(this).apply {
             text = "YOUR INTERNET. YOUR CONTROL."
@@ -1135,50 +1140,68 @@ class MainActivity : ComponentActivity() {
             setTextColor(Color.rgb(0, 210, 255))
         }, wrap())
         header.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(View(this), LinearLayout.LayoutParams(dp(64), dp(1)))
-        root.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+        header.addView(TextView(this).apply {
+            text = "🛡"
+            textSize = 30f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(0, 220, 255))
+        }, LinearLayout.LayoutParams(dp(44), dp(48)))
+        root.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58)))
 
+        // Large protection status panel
         val statusCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.rgb(5, 24, 58), Color.rgb(0, 48, 102))).apply { cornerRadius = dp(18).toFloat(); setStroke(dp(1), Color.rgb(0, 174, 255)) }
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(3, 20, 50), Color.rgb(0, 42, 91), Color.rgb(2, 18, 47))).apply {
+                cornerRadius = dp(20).toFloat()
+                setStroke(dp(1), Color.rgb(0, 157, 255))
+            }
         }
-        val statusIcon = TextView(this).apply {
-            text = "✓"
-            textSize = 30f
-            typeface = Typeface.DEFAULT_BOLD
+        statusCard.addView(TextView(this).apply {
+            text = "🛡️"
+            textSize = 43f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(0, 255, 135))
+        }, LinearLayout.LayoutParams(dp(64), dp(76)))
+        val statusColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
         }
-        statusCard.addView(statusIcon, LinearLayout.LayoutParams(dp(50), dp(50)))
-        val statusColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        statusColumn.addView(TextView(this).apply {
-            text = tr("Protection active", "الحماية مفعلة")
-            textSize = 20f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(white)
-        }, wrap())
-        statusText = TextView(this).apply {
-            textSize = 14f
-            setTextColor(white)
-        }
-        statusColumn.addView(statusText, wrap())
-        statusCard.addView(statusColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = dp(12)
-        })
-        root.addView(statusCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(16)
-            bottomMargin = dp(18)
-        })
-
-        root.addView(TextView(this).apply {
-            text = tr("Manage applications", "إدارة التطبيقات  ▦")
+        statusTitle = TextView(this).apply {
+            text = tr("PROTECTION ACTIVE", "الحماية مفعلة")
             textSize = 21f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            setTextColor(white)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
+            setTextColor(Color.rgb(0, 238, 145))
+        }
+        statusText = TextView(this).apply {
+            text = tr("Full control over your app connections", "تحكم كامل في اتصالات تطبيقاتك")
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(225, 237, 255))
+        }
+        statusColumn.addView(statusTitle, wrap())
+        statusColumn.addView(statusText, wrap())
+        statusCard.addView(statusColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        statusCard.addView(TextView(this).apply {
+            text = "▂▅▇\n🌐"
+            textSize = 24f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(0, 190, 255))
+        }, LinearLayout.LayoutParams(dp(54), dp(70)))
+        root.addView(statusCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(112)).apply {
+            topMargin = dp(12)
+            bottomMargin = dp(12)
+        })
+
+        root.addView(TextView(this).apply {
+            text = tr("Manage applications  ▦", "إدارة التطبيقات  ▦")
+            textSize = 21f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)))
 
         val modeRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1190,11 +1213,12 @@ class MainActivity : ComponentActivity() {
             val option = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(8), dp(10), dp(8), dp(10))
+                setPadding(dp(7), dp(8), dp(7), dp(8))
                 background = GradientDrawable().apply {
-                    setColor(if (chosen) Color.rgb(10, 35, 62) else Color.TRANSPARENT)
-                    cornerRadius = dp(12).toFloat()
-                    setStroke(dp(if (chosen) 2 else 1), if (chosen) Color.rgb(0, 229, 255) else Color.rgb(35, 53, 75))
+                    setColor(if (chosen) Color.rgb(0, 73, 173) else Color.rgb(8, 20, 43))
+                    cornerRadius = dp(18).toFloat()
+                    setStroke(dp(if (chosen) 2 else 1),
+                        if (chosen) Color.rgb(0, 210, 255) else Color.rgb(45, 93, 157))
                 }
                 isClickable = true
                 isFocusable = true
@@ -1208,55 +1232,40 @@ class MainActivity : ComponentActivity() {
             }
             option.addView(TextView(this).apply {
                 text = title
-                textSize = 13f
+                textSize = 15f
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
-                setTextColor(if (chosen) Color.rgb(0, 229, 255) else muted)
+                setTextColor(if (chosen) Color.WHITE else Color.rgb(210, 225, 248))
             }, wrap())
             option.addView(TextView(this).apply {
                 text = subtitle
-                textSize = 9f
+                textSize = 10f
                 gravity = Gravity.CENTER
-                setTextColor(if (chosen) Color.rgb(0, 229, 255) else muted)
+                setTextColor(if (chosen) Color.rgb(190, 245, 255) else Color.rgb(170, 190, 220))
             }, wrap())
-            modeRow.addView(option, LinearLayout.LayoutParams(0, dp(68), 1f).apply {
+            modeRow.addView(option, LinearLayout.LayoutParams(0, dp(76), 1f).apply {
                 marginStart = dp(5)
                 marginEnd = dp(5)
             })
         }
         addModeOption(tr("Exceptions mode", "وضع الاستثناءات"),
-            tr("Allow selected apps", "اسمح للتطبيقات المحددة"), FirewallVpnService.MODE_EXCEPTIONS)
+            tr("Allow selected apps only", "اسمح للتطبيقات المحددة فقط"), FirewallVpnService.MODE_EXCEPTIONS)
         addModeOption(tr("Individual control", "التحكم الفردي"),
-            tr("Block selected apps", "افصل تطبيقات محددة"), FirewallVpnService.MODE_INDIVIDUAL)
-        root.addView(modeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(74)).apply {
-            topMargin = dp(10)
+            tr("Disconnect a selected app", "فصل الإنترنت عن تطبيق محدد"), FirewallVpnService.MODE_INDIVIDUAL)
+        root.addView(modeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(84)).apply {
+            topMargin = dp(6)
             bottomMargin = dp(8)
         })
 
-        countText = TextView(this).apply {
-            textSize = 11f
-            setTextColor(muted)
-            setPadding(dp(4), dp(6), dp(4), dp(6))
-        }
-        root.addView(countText, wrap())
-
-        searchBox = EditText(this).apply {
-            hint = tr("Search installed apps", "ابحث في التطبيقات")
-            setSingleLine(true)
-            textSize = 14f
-            setTextColor(white)
-            setHintTextColor(muted)
-            background = rounded(Color.rgb(13, 31, 56), 12)
-            setPadding(dp(14), dp(10), dp(14), dp(10))
-            addTextChangedListener(SimpleTextWatcher { filterApps(it) })
-        }
-        root.addView(searchBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply {
-            bottomMargin = dp(10)
-        })
+        // Keep existing search/filter state initialized, but hide it to match the approved reference screen.
+        countText = TextView(this)
+        searchBox = EditText(this)
+        countText.visibility = View.GONE
+        searchBox.visibility = View.GONE
 
         listContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(2), 0, dp(8))
+            setPadding(0, dp(3), 0, dp(6))
         }
         root.addView(listContainer, wrap())
 
@@ -1264,23 +1273,24 @@ class MainActivity : ComponentActivity() {
             text = tr("TIP: You can switch between the two control modes at any time.", "ملاحظة: يمكنك التبديل بين الوضعين في أي وقت")
             textSize = 13f
             gravity = Gravity.CENTER
-            setTextColor(white)
+            setTextColor(Color.rgb(235, 244, 255))
             setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.rgb(5, 34, 78), Color.rgb(0, 58, 110))).apply {
-                cornerRadius = dp(16).toFloat()
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(4, 38, 86), Color.rgb(0, 61, 125))).apply {
+                cornerRadius = dp(17).toFloat()
                 setStroke(dp(1), Color.rgb(0, 174, 255))
             }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(10)
-            bottomMargin = dp(16)
+            topMargin = dp(8)
+            bottomMargin = dp(10)
         })
         root.addView(TextView(this).apply {
-            text = "MR. ASSAF"
-            textSize = 20f
+            text = "━━━━━━━━  MR. ASSAF  ━━━━━━━━"
+            textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            letterSpacing = 0.08f
-            setTextColor(white)
+            letterSpacing = 0.04f
+            setTextColor(Color.rgb(220, 230, 248))
             setPadding(0, dp(4), 0, dp(8))
         }, wrap())
         setContentView(scroll)
@@ -1340,9 +1350,10 @@ class MainActivity : ComponentActivity() {
             }
 
             appSwitch.setOnCheckedChangeListener(null)
-            appSwitch.isChecked = isBlocked
+            // Switch ON means internet connected; OFF means internet disconnected.
+            appSwitch.isChecked = !isBlocked
             appSwitch.setOnCheckedChangeListener { _, checked ->
-                applyAppBlockState(pkg, label, checked)
+                applyAppBlockState(pkg, label, !checked)
             }
 
             tileRow.addView(tile, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -1368,10 +1379,15 @@ class MainActivity : ComponentActivity() {
             "التطبيقات: ${installedApps.size} • ${selected.size} ${selectionDescription}"
         )
         val firewallActive = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
+        if (::statusTitle.isInitialized) {
+            statusTitle.text = if (firewallActive) tr("PROTECTION ACTIVE", "الحماية مفعلة")
+                else tr("PROTECTION INACTIVE", "الحماية غير مفعلة")
+            statusTitle.setTextColor(if (firewallActive) Color.rgb(0, 238, 145) else Color.rgb(255, 95, 105))
+        }
         statusText.text = if (firewallActive) {
-            tr("Protection is active • ${selected.size} ${selectionDescription}", "الحماية مفعلة • ${selected.size} ${selectionDescription}")
+            tr("Full control over your app connections", "تحكم كامل في اتصالات تطبيقاتك")
         } else {
-            tr("Protection is off", "الحماية غير مفعلة")
+            tr("Turn on protection to apply app controls", "فعّل الحماية لتطبيق إعدادات التطبيقات")
         }
     }
 
