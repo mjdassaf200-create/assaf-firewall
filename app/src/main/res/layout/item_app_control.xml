@@ -6,13 +6,13 @@
     android:background="@drawable/bg_neon_card"
     android:gravity="center"
     android:orientation="vertical"
-    android:padding="8dp"
-    android:minHeight="174dp">
+    android:padding="9dp"
+    android:minHeight="172dp">
 
     <ImageView
         android:id="@+id/imgAppIcon"
-        android:layout_width="72dp"
-        android:layout_height="72dp"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
         android:scaleType="fitCenter"
         android:importantForAccessibility="no" />
 
@@ -20,19 +20,19 @@
         android:id="@+id/tvAppName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
+        android:layout_marginTop="7dp"
         android:gravity="center"
         android:maxLines="1"
         android:ellipsize="end"
         android:text="WhatsApp"
         android:textColor="#FFFFFF"
-        android:textSize="14sp"
+        android:textSize="13sp"
         android:textStyle="bold" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="9dp"
         android:gravity="center"
         android:orientation="horizontal">
 
@@ -45,13 +45,14 @@
             android:background="@drawable/bg_status_connected"
             android:drawableStart="@drawable/ic_check_small"
             android:drawablePadding="2dp"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
+            android:paddingStart="3dp"
+            android:paddingEnd="3dp"
             android:maxLines="1"
             android:ellipsize="end"
             android:text="متصل"
             android:textColor="#FFFFFF"
-            android:textSize="10sp" />
+            android:textSize="10sp"
+            android:textStyle="bold" />
 
         <Switch
             android:id="@+id/switchAppControl"
