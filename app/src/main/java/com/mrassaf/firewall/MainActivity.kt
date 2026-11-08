@@ -1098,13 +1098,13 @@ class MainActivity : ComponentActivity() {
     private fun buildAppsScreen() {
         val scroll = ScrollView(this).apply {
             setFillViewport(true)
-            setBackgroundColor(Color.rgb(2, 8, 22))
+            setBackgroundColor(Color.rgb(9, 17, 32))
             isVerticalScrollBarEnabled = false
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(20))
-            setBackgroundColor(Color.rgb(2, 8, 22))
+            setPadding(dp(16), dp(12), dp(16), dp(24))
+            setBackgroundColor(Color.rgb(9, 17, 32))
             layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
         scroll.addView(root)
@@ -1215,7 +1215,7 @@ class MainActivity : ComponentActivity() {
                 gravity = Gravity.CENTER
                 setPadding(dp(7), dp(8), dp(7), dp(8))
                 background = GradientDrawable().apply {
-                    setColor(if (chosen) Color.rgb(0, 73, 173) else Color.rgb(8, 20, 43))
+                    setColor(if (chosen) Color.rgb(37, 99, 235) else Color.rgb(224, 242, 254))
                     cornerRadius = dp(18).toFloat()
                     setStroke(dp(if (chosen) 2 else 1),
                         if (chosen) Color.rgb(0, 210, 255) else Color.rgb(45, 93, 157))
@@ -1241,7 +1241,7 @@ class MainActivity : ComponentActivity() {
                 text = subtitle
                 textSize = 10f
                 gravity = Gravity.CENTER
-                setTextColor(if (chosen) Color.rgb(190, 245, 255) else Color.rgb(170, 190, 220))
+                setTextColor(if (chosen) Color.rgb(219, 234, 254) else Color.rgb(30, 58, 138))
             }, wrap())
             modeRow.addView(option, LinearLayout.LayoutParams(0, dp(76), 1f).apply {
                 marginStart = dp(5)
@@ -1316,7 +1316,7 @@ class MainActivity : ComponentActivity() {
             val pkg = item.third
             val isBlocked = if (mode == FirewallVpnService.MODE_INDIVIDUAL) pkg in selected else pkg !in selected
 
-            val tileRow: LinearLayout = if (index % 3 == 0) {
+            val tileRow: LinearLayout = if (index % 2 == 0) {
                 LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.TOP
