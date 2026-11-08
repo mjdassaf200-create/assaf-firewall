@@ -1097,12 +1097,12 @@ class MainActivity : ComponentActivity() {
     private fun buildAppsScreen() {
         val scroll = ScrollView(this).apply {
             setFillViewport(true)
-            setBackgroundColor(Color.rgb(5, 11, 20))
+            setBackgroundColor(Color.rgb(3, 10, 27))
             isVerticalScrollBarEnabled = false
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(20), dp(16), dp(24))
+            setPadding(dp(12), dp(10), dp(12), dp(22))
             setBackgroundColor(Color.rgb(5, 11, 20))
             layoutDirection = if (arabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
@@ -1122,15 +1122,15 @@ class MainActivity : ComponentActivity() {
             gravity = Gravity.CENTER
         }
         brand.addView(TextView(this).apply {
-            text = "ASSAF"
-            textSize = 22f
+            text = "🛡  ASSAF"
+            textSize = 25f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setTextColor(white)
         }, wrap())
         brand.addView(TextView(this).apply {
             text = "YOUR INTERNET. YOUR CONTROL."
-            textSize = 9f
+            textSize = 10f
             gravity = Gravity.CENTER
             setTextColor(Color.rgb(0, 210, 255))
         }, wrap())
@@ -1142,7 +1142,7 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = rounded(Color.rgb(10, 24, 46), 16)
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.rgb(5, 24, 58), Color.rgb(0, 48, 102))).apply { cornerRadius = dp(18).toFloat(); setStroke(dp(1), Color.rgb(0, 174, 255)) }
         }
         val statusIcon = TextView(this).apply {
             text = "✓"
@@ -1154,14 +1154,14 @@ class MainActivity : ComponentActivity() {
         statusCard.addView(statusIcon, LinearLayout.LayoutParams(dp(50), dp(50)))
         val statusColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         statusColumn.addView(TextView(this).apply {
-            text = tr("Protection status", "حالة الحماية")
-            textSize = 17f
+            text = tr("Protection active", "الحماية مفعلة")
+            textSize = 20f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(white)
         }, wrap())
         statusText = TextView(this).apply {
-            textSize = 12f
-            setTextColor(muted)
+            textSize = 14f
+            setTextColor(white)
         }
         statusColumn.addView(statusText, wrap())
         statusCard.addView(statusColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -1173,8 +1173,8 @@ class MainActivity : ComponentActivity() {
         })
 
         root.addView(TextView(this).apply {
-            text = tr("Manage applications", "إدارة التطبيقات")
-            textSize = 18f
+            text = tr("Manage applications", "إدارة التطبيقات  ▦")
+            textSize = 21f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setTextColor(white)
@@ -1259,6 +1259,30 @@ class MainActivity : ComponentActivity() {
             setPadding(0, dp(2), 0, dp(8))
         }
         root.addView(listContainer, wrap())
+
+        root.addView(TextView(this).apply {
+            text = tr("TIP: You can switch between the two control modes at any time.", "ملاحظة: يمكنك التبديل بين الوضعين في أي وقت")
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(white)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.rgb(5, 34, 78), Color.rgb(0, 58, 110))).apply {
+                cornerRadius = dp(16).toFloat()
+                setStroke(dp(1), Color.rgb(0, 174, 255))
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(10)
+            bottomMargin = dp(16)
+        })
+        root.addView(TextView(this).apply {
+            text = "MR. ASSAF"
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            letterSpacing = 0.08f
+            setTextColor(white)
+            setPadding(0, dp(4), 0, dp(8))
+        }, wrap())
         setContentView(scroll)
     }
 
