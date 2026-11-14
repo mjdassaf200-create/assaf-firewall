@@ -80,11 +80,16 @@ object AssafApiClient {
             .put("app_version", appVersion))
     }
 
-    fun authenticate(email: String, password: String, register: Boolean): String {
+    fun authenticate(email: String, password: String, register: Boolean, fullName: String = "", whatsappNumber: String = ""): String {
         val path = if (register) "/v1/auth/register" else "/v1/auth/login"
-        val result = JSONObject(request("POST", path, body = JSONObject()
+        val body = JSONObject()
             .put("email", email.trim())
-            .put("password", password)))
+            .put("password", password)
+        if (register) {
+            body.put("full_name", fullName.trim())
+            body.put("whatsapp_number", whatsappNumber.trim())
+        }
+        val result = JSONObject(request("POST", path, body = body))
         return result.getString("access_token")
     }
 
