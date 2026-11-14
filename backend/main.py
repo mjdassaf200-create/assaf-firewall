@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pwdlib import PasswordHash
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, select, inspect
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy.exc import IntegrityError
 
 APP_VERSION = "0.1.0"
 JWT_SECRET = os.getenv("JWT_SECRET")
@@ -50,6 +51,7 @@ class User(Base):
     ban_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     full_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     whatsapp_number: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    device_id_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
 
 
 class SupportMessage(Base):
@@ -108,7 +110,7 @@ class Subscription(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# create_all does not alter existing tables; add the ban columns safely for existing installs.
+# create_all does not alter existing tables; add new columns and uniqueness safely for existing installs.
 _user_columns = {column["name"] for column in inspect(engine).get_columns("users")}
 with engine.begin() as _connection:
     if "is_banned" not in _user_columns:
@@ -119,6 +121,9 @@ with engine.begin() as _connection:
         _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN full_name VARCHAR(120)")
     if "whatsapp_number" not in _user_columns:
         _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN whatsapp_number VARCHAR(16)")
+    if "device_id_hash" not in _user_columns:
+        _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN device_id_hash VARCHAR(64)")
+    _connection.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_device_id_hash ON users (device_id_hash)")
 
 _support_columns = {column["name"] for column in inspect(engine).get_columns("support_messages")}
 if "guest_token_hash" not in _support_columns:
@@ -146,11 +151,13 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
     whatsapp_number: str = Field(pattern=r"^\+[1-9]\d{7,14}$")
+    device_id: str = Field(min_length=16, max_length=128)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+    device_id: str = Field(min_length=16, max_length=128)
 
 
 class TokenResponse(BaseModel):
@@ -237,7 +244,7 @@ def get_db() -> Generator[Session, None, None]:
 
 def create_token(user: User) -> TokenResponse:
     expires = datetime.now(timezone.utc) + timedelta(hours=12)
-    token = jwt.encode({"sub": user.id, "email": user.email, "exp": expires}, JWT_SECRET, algorithm="HS256")
+    token = jwt.encode({"sub": user.id, "email": user.email, "device_id_hash": user.device_id_hash, "exp": expires}, JWT_SECRET, algorithm="HS256")
     return TokenResponse(access_token=token, expires_in=12 * 60 * 60)
 
 
@@ -255,6 +262,8 @@ def current_user(
     user = db.get(User, user_id) if user_id else None
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    if not user.device_id_hash or payload.get("device_id_hash") != user.device_id_hash:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="This session is not registered to this device. Sign in again on your registered phone.")
     return user
 
 
@@ -297,13 +306,20 @@ def health():
 @app.post("/v1/auth/register", response_model=TokenResponse, status_code=201, tags=["auth"])
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
     email = str(body.email).lower()
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status_code=409, detail="An account with this email already exists")
-    user = User(email=email, full_name=body.full_name.strip(), whatsapp_number=body.whatsapp_number, password_hash=password_hash.hash(body.password))
+    if db.scalar(select(User).where(User.device_id_hash == device_hash)):
+        raise HTTPException(status_code=409, detail="This phone already has an ASSAF account. Sign in to your existing account.")
+    user = User(email=email, full_name=body.full_name.strip(), whatsapp_number=body.whatsapp_number, device_id_hash=device_hash, password_hash=password_hash.hash(body.password))
     db.add(user)
     db.flush()
     db.add(Subscription(user_id=user.id, plan="free", status="active", provider="none"))
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This phone is already linked to an ASSAF account.")
     db.refresh(user)
     return create_token(user)
 
@@ -313,6 +329,16 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == str(body.email).lower()))
     if user is None or not password_hash.verify(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    if user.device_id_hash and user.device_id_hash != device_hash:
+        raise HTTPException(status_code=403, detail="This account is linked to another phone. Contact ASSAF owner to request a device change.")
+    if not user.device_id_hash:
+        user.device_id_hash = device_hash
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=403, detail="This phone is already linked to another ASSAF account.")
     return create_token(user)
 
 
