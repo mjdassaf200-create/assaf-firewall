@@ -23,6 +23,7 @@ android {
 }
 
 dependencies {
+    implementation("com.googlecode.libphonenumber:libphonenumber:8.13.55")
     implementation("com.google.android.gms:play-services-ads:24.9.0")
     val composeBom = platform("androidx.compose:compose-bom:2025.08.01")
     implementation(composeBom)
