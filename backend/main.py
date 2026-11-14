@@ -309,6 +309,9 @@ def health():
 @app.post("/v1/auth/register", response_model=TokenResponse, status_code=201, tags=["auth"])
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
     email = str(body.email).lower()
+    # The configured owner identity is reserved and cannot be claimed through public registration.
+    if OWNER_ADMIN_EMAIL and secrets.compare_digest(email, OWNER_ADMIN_EMAIL):
+        raise HTTPException(status_code=403, detail="This email is reserved for the ASSAF owner sign-in.")
     device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status_code=409, detail="An account with this email already exists")
@@ -329,7 +332,13 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
 @app.post("/v1/auth/login", response_model=TokenResponse, tags=["auth"])
 def login(body: LoginRequest, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.email == str(body.email).lower()))
+    email = str(body.email).strip().lower()
+    # Owner uses the same sign-in form as everyone else. The server alone decides the role.
+    if OWNER_ADMIN_EMAIL and secrets.compare_digest(email, OWNER_ADMIN_EMAIL):
+        if not OWNER_ADMIN_PASSWORD or not secrets.compare_digest(body.password, OWNER_ADMIN_PASSWORD):
+            raise HTTPException(status_code=401, detail="Email or password is incorrect")
+        return owner_token(email)
+    user = db.scalar(select(User).where(User.email == email))
     if user is None or not password_hash.verify(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
     device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
