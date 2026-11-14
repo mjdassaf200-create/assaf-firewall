@@ -119,4 +119,19 @@ object AssafApiClient {
             .put("idempotency_key", idempotencyKey)
     ))
 
+    fun getAdminWallets(token: String): JSONArray =
+        JSONArray(request("GET", "/v1/admin/wallets", token))
+
+    fun getAdminPayouts(token: String): JSONArray =
+        JSONArray(request("GET", "/v1/admin/payouts?payout_status=pending", token))
+
+    fun addAdminEarning(token: String, userId: String, amountCents: Long, description: String, source: String, externalRef: String): JSONObject =
+        JSONObject(request("POST", "/v1/admin/wallets/$userId/earnings", token,
+            JSONObject().put("amount_cents", amountCents).put("description", description)
+                .put("source", source).put("external_ref", externalRef)))
+
+    fun decideAdminPayout(token: String, payoutId: String, status: String): JSONObject =
+        JSONObject(request("PATCH", "/v1/admin/payouts/$payoutId", token,
+            JSONObject().put("status", status)))
+
 }
