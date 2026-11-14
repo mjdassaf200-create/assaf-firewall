@@ -136,6 +136,9 @@ object AssafApiClient {
     fun getAdminPayouts(token: String): JSONArray =
         JSONArray(request("GET", "/v1/admin/payouts?payout_status=pending", token))
 
+    fun getAdminUsers(token: String): JSONArray =
+        JSONArray(request("GET", "/v1/admin/users", token))
+
     fun addAdminEarning(token: String, userId: String, amountCents: Long, description: String, source: String, externalRef: String): JSONObject =
         JSONObject(request("POST", "/v1/admin/wallets/$userId/earnings", token,
             JSONObject().put("amount_cents", amountCents).put("description", description)
