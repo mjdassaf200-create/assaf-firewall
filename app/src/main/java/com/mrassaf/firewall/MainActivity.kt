@@ -1015,7 +1015,7 @@ class MainActivity : ComponentActivity() {
             gravity = Gravity.CENTER
         }, wrap())
         balanceCard.addView(TextView(this).apply {
-            text = "$0.00"
+            text = "\$0.00"
             textSize = 32f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.rgb(59, 130, 246))
