@@ -471,6 +471,18 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), 0)
         }
+        val fullNameInput = EditText(this).apply {
+            hint = tr("Full name", "الاسم الكامل")
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            setSingleLine(true)
+            visibility = View.GONE
+        }
+        val whatsappInput = EditText(this).apply {
+            hint = tr("WhatsApp number with country code, e.g. +9705XXXXXXXX", "رقم واتساب مع مفتاح الدولة، مثال +9705XXXXXXXX")
+            inputType = InputType.TYPE_CLASS_PHONE
+            setSingleLine(true)
+            visibility = View.GONE
+        }
         val emailInput = EditText(this).apply {
             hint = tr("Email address", "البريد الإلكتروني")
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
@@ -484,7 +496,13 @@ class MainActivity : ComponentActivity() {
         val registerCheck = CheckBox(this).apply {
             text = tr("Create a new account", "إنشاء حساب جديد")
             setTextColor(white)
+            setOnCheckedChangeListener { _, checked ->
+                fullNameInput.visibility = if (checked) View.VISIBLE else View.GONE
+                whatsappInput.visibility = if (checked) View.VISIBLE else View.GONE
+            }
         }
+        form.addView(fullNameInput, wrap())
+        form.addView(whatsappInput, wrap())
         form.addView(emailInput, wrap())
         form.addView(passwordInput, wrap())
         form.addView(registerCheck, wrap())
@@ -502,7 +520,18 @@ class MainActivity : ComponentActivity() {
                     emailInput.error = tr("Enter a valid email", "أدخل بريدًا إلكترونيًا صحيحًا")
                     return@setOnClickListener
                 }
-                if (password.length < if (registerCheck.isChecked) 10 else 1) {
+                val creatingAccount = registerCheck.isChecked
+                val fullName = fullNameInput.text.toString().trim()
+                val whatsapp = whatsappInput.text.toString().trim().replace(" ", "").replace("-", "")
+                if (creatingAccount && fullName.length < 2) {
+                    fullNameInput.error = tr("Enter your full name", "أدخل اسمك الكامل")
+                    return@setOnClickListener
+                }
+                if (creatingAccount && !Regex("^\\\\+[1-9][0-9]{7,14}$").matches(whatsapp)) {
+                    whatsappInput.error = tr("Use international format, e.g. +9705XXXXXXXX", "استخدم الصيغة الدولية، مثال +9705XXXXXXXX")
+                    return@setOnClickListener
+                }
+                if (password.length < if (creatingAccount) 10 else 1) {
                     passwordInput.error = tr("Password is too short", "كلمة المرور قصيرة")
                     return@setOnClickListener
                 }
@@ -510,7 +539,7 @@ class MainActivity : ComponentActivity() {
                 dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
                 Thread {
                     val result = runCatching {
-                        AssafApiClient.authenticate(email, password, registerCheck.isChecked)
+                        AssafApiClient.authenticate(email, password, creatingAccount, fullName, whatsapp)
                     }
                     runOnUiThread {
                         dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
@@ -1239,11 +1268,11 @@ class MainActivity : ComponentActivity() {
         val token = prefs.getString(KEY_OWNER_API_TOKEN, null) ?: return
         Thread {
             val result = runCatching {
-                Pair(AssafApiClient.getAdminWallets(token), AssafApiClient.getAdminPayouts(token))
+                Triple(AssafApiClient.getAdminWallets(token), AssafApiClient.getAdminPayouts(token), AssafApiClient.getAdminUsers(token))
             }
             runOnUiThread {
                 if (currentScreen != "owner_wallet") return@runOnUiThread
-                result.onSuccess { (wallets, requests) ->
+                result.onSuccess { (wallets, requests, registeredUsers) ->
                     val totalUsers = wallets.length()
                     var totalCents = 0L
                     for (i in 0 until wallets.length()) totalCents += wallets.optJSONObject(i)?.optLong("balance_cents", 0L) ?: 0L
@@ -1275,10 +1304,25 @@ class MainActivity : ComponentActivity() {
                         val item = wallets.optJSONObject(i) ?: continue
                         val uid = item.optString("user_id")
                         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10)); background = rounded(panel, 12) }
+                        val profile = (0 until registeredUsers.length()).mapNotNull { index ->
+                            registeredUsers.optJSONObject(index)?.takeIf { it.optString("id") == uid }
+                        }.firstOrNull()
+                        val fullName = profile?.optString("full_name").orEmpty()
+                        val whatsapp = profile?.optString("whatsapp_number").orEmpty()
                         row.addView(TextView(this).apply {
-                            text = item.optString("email") + "\n$" + String.format(Locale.US, "%.2f", item.optLong("balance_cents") / 100.0)
-                            setTextColor(white); textSize = 12f
+                            text = listOf(fullName, item.optString("email"), if (whatsapp.isNotBlank()) "WhatsApp: $whatsapp" else "WhatsApp: —",
+                                "$" + String.format(Locale.US, "%.2f", item.optLong("balance_cents") / 100.0)).filter { it.isNotBlank() }.joinToString("\\n")
+                            setTextColor(white); textSize = 11f
                         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        if (whatsapp.isNotBlank()) {
+                            row.addView(smallButton().apply {
+                                text = tr("WhatsApp", "واتساب")
+                                setOnClickListener {
+                                    val digits = whatsapp.filter { it.isDigit() }
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits")))
+                                }
+                            }, wrap())
+                        }
                         row.addView(smallButton().apply { text = tr("Credit", "إضافة ربح"); setOnClickListener { showOwnerCreditDialog(uid, summary, payouts, users) } }, wrap())
                         users.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(7) })
                     }
