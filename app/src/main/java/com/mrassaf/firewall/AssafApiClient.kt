@@ -180,6 +180,11 @@ object AssafApiClient {
         return JSONObject(request("POST", "/v1/admin/recover-device", body = body))
     }
 
+    fun refreshOwnerSession(refreshToken: String, deviceId: String): JSONObject =
+        JSONObject(request("POST", "/v1/admin/refresh", body = JSONObject()
+            .put("refresh_token", refreshToken)
+            .put("device_id", deviceId)))
+
     fun getAdminWallets(token: String): JSONArray =
         JSONArray(request("GET", "/v1/admin/wallets", token))
 
