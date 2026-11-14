@@ -1568,7 +1568,6 @@ class MainActivity : ComponentActivity() {
                     },
                     onManageApps = { goTo("apps") },
                     onCheckLinks = { goTo("link") },
-                    onContact = { goTo("contact") },
                     onEarn = { goTo("earn") }
                 )
             }
@@ -2118,7 +2117,6 @@ private fun MainScreen(
     onToggleProtection: () -> Unit,
     onManageApps: () -> Unit,
     onCheckLinks: () -> Unit,
-    onContact: () -> Unit,
     onEarn: () -> Unit
 ) {
     val muted = ComposeColor(0xFF7B9CC6)
@@ -2242,10 +2240,6 @@ private fun MainScreen(
             OptionCard("فحص الروابط",
                 "تحقق من أمان أي رابط قبل فتحه",
                 Icons.Default.Link, onCheckLinks)
-            Spacer(Modifier.height(10.dp))
-            OptionCard("تواصل معنا",
-                "أرسل رسالة مباشرة إلى مالك التطبيق",
-                Icons.Default.SupportAgent, onContact)
             Spacer(Modifier.height(10.dp))
             OptionCard("اكسب معنا",
                 "أنجز المهام واجمع رصيدك",
