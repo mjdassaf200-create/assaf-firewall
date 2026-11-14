@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.*
@@ -1663,7 +1664,8 @@ private fun MainScreen(
     onToggleProtection: () -> Unit,
     onManageApps: () -> Unit,
     onCheckLinks: () -> Unit,
-    onContact: () -> Unit
+    onContact: () -> Unit,
+    onEarn: () -> Unit
 ) {
     val muted = ComposeColor(0xFF7B9CC6)
     val blue = ComposeColor(0xFF007AFF)
@@ -1790,6 +1792,10 @@ private fun MainScreen(
             OptionCard("تواصل معنا",
                 "أرسل رسالة مباشرة إلى مالك التطبيق",
                 Icons.Default.SupportAgent, onContact)
+            Spacer(Modifier.height(10.dp))
+            OptionCard("اكسب معنا",
+                "أنجز المهام واجمع رصيدك",
+                Icons.Default.MonetizationOn, onEarn)
 
             Spacer(Modifier.height(24.dp))
             Row(
