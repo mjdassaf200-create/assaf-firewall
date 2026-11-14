@@ -237,7 +237,9 @@ class MainActivity : ComponentActivity() {
 
     private fun buildUi() {
         if (accountBanned && currentScreen !in setOf("banned", "contact", "appeal")) currentScreen = "banned"
+        if (prefs.getString(KEY_API_TOKEN, null).isNullOrBlank() && !accountBanned && currentScreen != "account") currentScreen = "account"
         when (currentScreen) {
+            "account" -> buildAccountScreen()
             "banned" -> buildBannedScreen()
             "contact" -> buildContactScreen()
             "appeal" -> buildAppealScreen()
@@ -353,8 +355,8 @@ class MainActivity : ComponentActivity() {
         }
         scroll.addView(root)
         root.addView(smallButton().apply {
-            text = if (accountBanned) tr("← Back", "← رجوع") else tr("← Back to home", "← الرجوع للرئيسية")
-            setOnClickListener { goTo(if (accountBanned) "banned" else "home") }
+            text = if (accountBanned) tr("← Back", "← رجوع") else if (prefs.getString(KEY_API_TOKEN, null).isNullOrBlank()) tr("Account required", "الحساب مطلوب") else tr("← Back to home", "← الرجوع للرئيسية")
+            setOnClickListener { goTo(if (accountBanned) "banned" else if (prefs.getString(KEY_API_TOKEN, null).isNullOrBlank()) "account" else "home") }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)))
         root.addView(TextView(this).apply {
             text = title; textSize = 22f; typeface = Typeface.DEFAULT_BOLD
@@ -464,6 +466,17 @@ class MainActivity : ComponentActivity() {
         val active = prefs.getBoolean(FirewallVpnService.KEY_FIREWALL_ACTIVE, false)
         root.addView(infoCard(tr("Firewall status: " + if (active) "Active" else "Off", "حالة جدار الحماية: " + if (active) "يعمل" else "متوقف")),
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
+    }
+
+    private fun buildAccountScreen() {
+        val root = pageRoot(tr("ASSAF account required", "يلزم إنشاء حساب ASSAF"))
+        root.addView(infoCard(tr(
+            "Create your account or sign in to continue. Your full name and WhatsApp number let the ASSAF owner contact you about your account and earnings.",
+            "أنشئ حسابك أو سجّل الدخول للمتابعة. الاسم الكامل ورقم واتساب يساعدان مالك ASSAF على التواصل معك بخصوص حسابك وأرباحك."
+        )), wrap())
+        root.addView(primaryButton(tr("Sign in / Create account", "تسجيل الدخول / إنشاء حساب")).apply {
+            setOnClickListener { showAccountDialog() }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(16) })
     }
 
     private fun showAccountDialog() {
