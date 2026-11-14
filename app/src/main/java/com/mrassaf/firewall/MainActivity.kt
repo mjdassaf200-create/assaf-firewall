@@ -1378,7 +1378,7 @@ class MainActivity : ComponentActivity() {
                                 val recoveryView = EditText(this).apply {
                                     setText(newRecoveryCode)
                                     isSingleLine = false
-                                    isTextSelectable = true
+                                    setTextIsSelectable(true)
                                     textSize = 16f
                                 }
                                 AlertDialog.Builder(this)
