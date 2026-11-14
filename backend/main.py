@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pwdlib import PasswordHash
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, create_engine, select, inspect
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, select, inspect
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 APP_VERSION = "0.1.0"
@@ -809,3 +809,211 @@ def analyze_link(body: LinkCheckRequest, user: User | None = Depends(optional_us
         },
         "data_sources": ["Local URL parser", "System DNS resolver", "Public RDAP endpoint (when available)"] + (["Google Safe Browsing"] if threat_intelligence.get("status") in {"clean", "malicious"} else []),
     }
+
+
+# Wallet and immutable earnings ledger.
+# All money values are stored as integer US cents; never use floating-point arithmetic.
+class WalletAccount(Base):
+    __tablename__ = "wallet_accounts"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    balance_cents: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class WalletEntry(Base):
+    __tablename__ = "wallet_entries"
+    __table_args__ = (UniqueConstraint("external_ref", name="uq_wallet_entry_external_ref"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    entry_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    description: Mapped[str] = mapped_column(String(300), nullable=False)
+    source: Mapped[str] = mapped_column(String(40), default="system", nullable=False)
+    external_ref: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+
+class PayoutRequest(Base):
+    __tablename__ = "payout_requests"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    method: Mapped[str] = mapped_column(String(40), nullable=False)
+    destination: Mapped[str] = mapped_column(String(300), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False, index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    admin_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PayoutInput(BaseModel):
+    amount_cents: int = Field(gt=0, le=100000000)
+    method: str = Field(min_length=2, max_length=40)
+    destination: str = Field(min_length=4, max_length=300)
+    idempotency_key: str = Field(min_length=16, max_length=80)
+
+
+class OwnerEarningInput(BaseModel):
+    amount_cents: int = Field(gt=0, le=100000000)
+    description: str = Field(min_length=3, max_length=300)
+    source: str = Field(default="manual", min_length=2, max_length=40)
+    external_ref: str = Field(min_length=8, max_length=160)
+
+
+class OwnerPayoutDecision(BaseModel):
+    status: str = Field(pattern=r"^(paid|rejected)$")
+    admin_note: str | None = Field(default=None, max_length=500)
+
+
+# create_all creates only the new wallet tables; existing account and app tables are preserved.
+Base.metadata.create_all(bind=engine)
+
+
+def _wallet_for_update(db: Session, user_id: str) -> WalletAccount:
+    wallet = db.scalar(select(WalletAccount).where(WalletAccount.user_id == user_id).with_for_update())
+    if wallet is None:
+        wallet = WalletAccount(user_id=user_id, balance_cents=0, currency="USD")
+        db.add(wallet)
+        db.flush()
+    return wallet
+
+
+def _wallet_entry_json(row: WalletEntry) -> dict:
+    return {
+        "id": row.id,
+        "amount_cents": row.amount_cents,
+        "amount": f"{row.amount_cents / 100:.2f}",
+        "currency": "USD",
+        "type": row.entry_type,
+        "description": row.description,
+        "source": row.source,
+        "created_at": row.created_at.isoformat(),
+    }
+
+
+@app.get("/v1/wallet", tags=["wallet"])
+def get_wallet(user: User = Depends(active_user), db: Session = Depends(get_db)):
+    wallet = db.get(WalletAccount, user.id)
+    if wallet is None:
+        wallet = WalletAccount(user_id=user.id, balance_cents=0, currency="USD")
+        db.add(wallet)
+        db.commit()
+        db.refresh(wallet)
+    return {
+        "balance_cents": wallet.balance_cents,
+        "balance": f"{wallet.balance_cents / 100:.2f}",
+        "currency": wallet.currency,
+        "updated_at": wallet.updated_at.isoformat() if wallet.updated_at else None,
+    }
+
+
+@app.get("/v1/wallet/transactions", tags=["wallet"])
+def wallet_transactions(limit: int = Query(default=50, ge=1, le=100), user: User = Depends(active_user), db: Session = Depends(get_db)):
+    rows = db.scalars(
+        select(WalletEntry).where(WalletEntry.user_id == user.id)
+        .order_by(WalletEntry.created_at.desc()).limit(limit)
+    )
+    return [_wallet_entry_json(row) for row in rows]
+
+
+@app.post("/v1/wallet/payouts", status_code=201, tags=["wallet"])
+def request_payout(body: PayoutInput, user: User = Depends(active_user), db: Session = Depends(get_db)):
+    existing = db.scalar(select(PayoutRequest).where(PayoutRequest.idempotency_key == body.idempotency_key))
+    if existing is not None:
+        if existing.user_id != user.id:
+            raise HTTPException(status_code=409, detail="Idempotency key already used")
+        return {"id": existing.id, "amount_cents": existing.amount_cents, "status": existing.status, "created_at": existing.created_at.isoformat()}
+    wallet = _wallet_for_update(db, user.id)
+    if wallet.balance_cents < body.amount_cents:
+        raise HTTPException(status_code=409, detail="Insufficient available balance")
+    payout = PayoutRequest(
+        user_id=user.id, amount_cents=body.amount_cents,
+        method=body.method.strip(), destination=body.destination.strip(),
+        status="pending", idempotency_key=body.idempotency_key,
+    )
+    wallet.balance_cents -= body.amount_cents
+    db.add(payout)
+    db.flush()
+    db.add(WalletEntry(
+        user_id=user.id, amount_cents=-body.amount_cents, entry_type="payout_hold",
+        description="Payout request reserved", source="payout",
+        external_ref="payout:" + payout.id,
+    ))
+    db.commit()
+    db.refresh(payout)
+    return {"id": payout.id, "amount_cents": payout.amount_cents, "status": payout.status, "created_at": payout.created_at.isoformat()}
+
+
+@app.get("/v1/admin/wallets", tags=["owner"])
+def owner_wallets(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(User.id, User.email, WalletAccount.balance_cents)
+        .outerjoin(WalletAccount, WalletAccount.user_id == User.id)
+        .order_by(User.created_at.desc()).limit(500)
+    ).all()
+    return [
+        {"user_id": user_id, "email": email, "balance_cents": balance or 0,
+         "balance": f"{(balance or 0) / 100:.2f}", "currency": "USD"}
+        for user_id, email, balance in rows
+    ]
+
+
+@app.post("/v1/admin/wallets/{user_id}/earnings", status_code=201, tags=["owner"])
+def owner_credit_earning(user_id: str, body: OwnerEarningInput, _owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    prior = db.scalar(select(WalletEntry).where(WalletEntry.external_ref == body.external_ref))
+    if prior is not None:
+        if prior.user_id != user_id:
+            raise HTTPException(status_code=409, detail="External reference already used")
+        return {"entry": _wallet_entry_json(prior), "duplicate": True}
+    wallet = _wallet_for_update(db, user_id)
+    wallet.balance_cents += body.amount_cents
+    entry = WalletEntry(
+        user_id=user_id, amount_cents=body.amount_cents, entry_type="earning",
+        description=body.description.strip(), source=body.source.strip(),
+        external_ref=body.external_ref.strip(),
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return {"entry": _wallet_entry_json(entry), "duplicate": False}
+
+
+@app.get("/v1/admin/payouts", tags=["owner"])
+def owner_list_payouts(payout_status: str | None = Query(default=None, pattern=r"^(pending|paid|rejected)$"), _owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    query = select(PayoutRequest).order_by(PayoutRequest.created_at.desc()).limit(300)
+    if payout_status:
+        query = query.where(PayoutRequest.status == payout_status)
+    rows = db.scalars(query)
+    return [
+        {"id": row.id, "user_id": row.user_id, "amount_cents": row.amount_cents,
+         "method": row.method, "destination": row.destination, "status": row.status,
+         "created_at": row.created_at.isoformat(), "admin_note": row.admin_note}
+        for row in rows
+    ]
+
+
+@app.patch("/v1/admin/payouts/{payout_id}", tags=["owner"])
+def owner_decide_payout(payout_id: str, body: OwnerPayoutDecision, _owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    payout = db.scalar(select(PayoutRequest).where(PayoutRequest.id == payout_id).with_for_update())
+    if payout is None:
+        raise HTTPException(status_code=404, detail="Payout request not found")
+    if payout.status != "pending":
+        raise HTTPException(status_code=409, detail="Payout request has already been reviewed")
+    payout.status = body.status
+    payout.admin_note = (body.admin_note or "").strip() or None
+    payout.reviewed_at = datetime.now(timezone.utc)
+    if body.status == "rejected":
+        wallet = _wallet_for_update(db, payout.user_id)
+        wallet.balance_cents += payout.amount_cents
+        db.add(WalletEntry(
+            user_id=payout.user_id, amount_cents=payout.amount_cents,
+            entry_type="payout_refund", description="Rejected payout refunded",
+            source="payout", external_ref="payout_refund:" + payout.id,
+        ))
+    db.commit()
+    return {"id": payout.id, "status": payout.status, "reviewed_at": payout.reviewed_at.isoformat()}
