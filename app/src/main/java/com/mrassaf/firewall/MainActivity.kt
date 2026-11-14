@@ -1313,11 +1313,36 @@ class MainActivity : ComponentActivity() {
                     return@setPositiveButton
                 }
                 Thread {
-                    val result = runCatching { AssafApiClient.authenticateOwner(mail, pass) }
+                    val result = runCatching {
+                        val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                            ?: throw IllegalStateException("Could not identify this Android device")
+                        AssafApiClient.authenticateOwner(mail, pass, deviceId)
+                    }
                     runOnUiThread {
-                        result.onSuccess { ownerToken ->
+                        result.onSuccess { ownerResult ->
+                            val ownerToken = ownerResult.getString("access_token")
                             prefs.edit().putString(KEY_OWNER_API_TOKEN, ownerToken).apply()
-                            buildOwnerWalletScreen()
+                            val recoveryCode = ownerResult.optString("recovery_code")
+                            if (recoveryCode.isNotBlank()) {
+                                val recoveryView = EditText(this).apply {
+                                    setText(recoveryCode)
+                                    isSingleLine = false
+                                    isTextSelectable = true
+                                    textSize = 16f
+                                }
+                                AlertDialog.Builder(this)
+                                    .setTitle(tr("Save your owner recovery code", "احفظ رمز استعادة المالك"))
+                                    .setMessage(tr(
+                                        "This code is shown once. Save it somewhere private and offline. Anyone with this code and your owner password may recover the owner device.",
+                                        "هذا الرمز يظهر مرة واحدة فقط. احفظه في مكان خاص وآمن خارج الهاتف. يلزم الرمز مع كلمة مرور المالك لاستعادة الجهاز."
+                                    ))
+                                    .setView(recoveryView)
+                                    .setPositiveButton(tr("I saved it", "حفظته")) { _, _ -> buildOwnerWalletScreen() }
+                                    .setCancelable(false)
+                                    .show()
+                            } else {
+                                buildOwnerWalletScreen()
+                            }
                         }.onFailure {
                             Toast.makeText(this, it.message ?: tr("Owner sign-in failed.", "فشل دخول المالك."), Toast.LENGTH_LONG).show()
                         }
