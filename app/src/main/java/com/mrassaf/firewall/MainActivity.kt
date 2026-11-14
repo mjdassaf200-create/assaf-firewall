@@ -1385,12 +1385,103 @@ class MainActivity : ComponentActivity() {
                                 }
                             }, wrap())
                         }
+
+                        row.addView(smallButton().apply {
+                            text = tr("Details", "التفاصيل")
+                            setOnClickListener { showOwnerUserDetails(uid) }
+                        }, wrap())
+                        row.addView(smallButton().apply {
+                            text = if (profile?.optBoolean("is_banned", false) == true) tr("Unban", "إلغاء الحظر") else tr("Ban", "حظر")
+                            setOnClickListener {
+                                val banned = profile?.optBoolean("is_banned", false) != true
+                                val reasonInput = EditText(this@MainActivity).apply { hint = tr("Reason (optional)", "سبب الحظر (اختياري)") }
+                                val dialog = AlertDialog.Builder(this@MainActivity)
+                                    .setTitle(if (banned) tr("Ban user", "حظر المستخدم") else tr("Unban user", "إلغاء حظر المستخدم"))
+                                    .setView(if (banned) reasonInput else TextView(this@MainActivity).apply { text = tr("Confirm unblocking this account?", "هل تريد إلغاء حظر هذا الحساب؟") })
+                                    .setNegativeButton(tr("Cancel", "إلغاء"), null)
+                                    .setPositiveButton(tr("Confirm", "تأكيد"), null)
+                                    .create()
+                                dialog.setOnShowListener {
+                                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                                        val ownerToken = prefs.getString(KEY_OWNER_API_TOKEN, null) ?: return@setOnClickListener
+                                        Thread {
+                                            val changed = runCatching { AssafApiClient.setAdminUserBan(ownerToken, uid, banned, reasonInput.text.toString()) }
+                                            runOnUiThread {
+                                                changed.onSuccess { loadOwnerWalletData(summary, payouts, users); dialog.dismiss() }
+                                                    .onFailure { Toast.makeText(this@MainActivity, it.message ?: "Error", Toast.LENGTH_LONG).show() }
+                                            }
+                                        }.start()
+                                    }
+                                }
+                                dialog.show()
+                            }
+                        }, wrap())
                         row.addView(smallButton().apply { text = tr("Credit", "إضافة ربح"); setOnClickListener { showOwnerCreditDialog(uid, summary, payouts, users) } }, wrap())
                         users.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(7) })
                     }
                 }.onFailure {
                     summary.text = tr("Owner access denied or service unavailable: ", "تعذر الوصول للوحة المالك أو الخدمة غير متاحة: ") + (it.message ?: "")
                     payouts.removeAllViews(); users.removeAllViews()
+                }
+            }
+        }.start()
+    }
+
+    private fun showOwnerUserDetails(userId: String) {
+        val token = prefs.getString(KEY_OWNER_API_TOKEN, null) ?: return
+        val loading = AlertDialog.Builder(this)
+            .setTitle(tr("User details", "تفاصيل المستخدم"))
+            .setMessage(tr("Loading account details…", "جارٍ تحميل تفاصيل الحساب…"))
+            .setNegativeButton(tr("Close", "إغلاق"), null)
+            .create()
+        loading.show()
+        Thread {
+            val result = runCatching { AssafApiClient.getAdminUserDetail(token, userId) }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                result.onSuccess { data ->
+                    val user = data.optJSONObject("user") ?: org.json.JSONObject()
+                    val wallet = data.optJSONObject("wallet") ?: org.json.JSONObject()
+                    val transactions = data.optJSONArray("transactions") ?: org.json.JSONArray()
+                    val payoutRows = data.optJSONArray("payouts") ?: org.json.JSONArray()
+                    val lines = StringBuilder()
+                    lines.append(tr("Name: ", "الاسم: ")).append(user.optString("full_name", "—")).append("\\n")
+                    lines.append(tr("Email: ", "البريد: ")).append(user.optString("email", "—")).append("\\n")
+                    lines.append(tr("WhatsApp: ", "واتساب: ")).append(user.optString("whatsapp_number", "—")).append("\\n")
+                    lines.append(tr("Joined: ", "تاريخ التسجيل: ")).append(user.optString("created_at", "—")).append("\\n")
+                    lines.append(tr("Device linked: ", "الجهاز مرتبط: ")).append(if (user.optBoolean("device_linked")) tr("Yes", "نعم") else tr("No", "لا")).append("\\n")
+                    lines.append(tr("Account status: ", "حالة الحساب: ")).append(if (user.optBoolean("is_banned")) tr("Banned", "محظور") else tr("Active", "نشط")).append("\\n\\n")
+                    lines.append(tr("Current balance: $", "الرصيد الحالي: $")).append(String.format(Locale.US, "%.2f", wallet.optLong("balance_cents") / 100.0)).append("\\n")
+                    lines.append(tr("Total earned: $", "إجمالي الأرباح: $")).append(String.format(Locale.US, "%.2f", wallet.optLong("total_credited_cents") / 100.0)).append("\\n")
+                    lines.append(tr("Total debited: $", "إجمالي المخصوم: $")).append(String.format(Locale.US, "%.2f", wallet.optLong("total_debited_cents") / 100.0)).append("\\n\\n")
+                    lines.append(tr("TRANSACTIONS", "سجل الحركات")).append("\\n")
+                    if (transactions.length() == 0) lines.append(tr("No transactions", "لا توجد حركات")).append("\\n")
+                    for (i in 0 until transactions.length()) {
+                        val entry = transactions.optJSONObject(i) ?: continue
+                        val amount = entry.optLong("amount_cents")
+                        lines.append(if (amount >= 0) "+" else "−")
+                            .append(String.format(Locale.US, "$%.2f", kotlin.math.abs(amount) / 100.0))
+                            .append(" • ").append(entry.optString("description", entry.optString("entry_type")))
+                            .append("\\n").append(entry.optString("created_at")).append("\\n")
+                    }
+                    lines.append("\\n").append(tr("PAYOUT HISTORY", "سجل طلبات السحب")).append("\\n")
+                    if (payoutRows.length() == 0) lines.append(tr("No payout requests", "لا توجد طلبات سحب")).append("\\n")
+                    for (i in 0 until payoutRows.length()) {
+                        val payout = payoutRows.optJSONObject(i) ?: continue
+                        lines.append("$").append(String.format(Locale.US, "%.2f", payout.optLong("amount_cents") / 100.0))
+                            .append(" • ").append(payout.optString("status")).append("\\n")
+                        lines.append(payout.optString("method")).append(" — ").append(payout.optString("destination")).append("\\n")
+                        lines.append(payout.optString("created_at")).append("\\n")
+                    }
+                    loading.dismiss()
+                    AlertDialog.Builder(this)
+                        .setTitle(user.optString("full_name").ifBlank { tr("User details", "تفاصيل المستخدم") })
+                        .setMessage(lines.toString())
+                        .setPositiveButton(tr("Close", "إغلاق"), null)
+                        .show()
+                }.onFailure {
+                    loading.dismiss()
+                    Toast.makeText(this, it.message ?: tr("Could not load user details.", "تعذر تحميل تفاصيل المستخدم."), Toast.LENGTH_LONG).show()
                 }
             }
         }.start()
