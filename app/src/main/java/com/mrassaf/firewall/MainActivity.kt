@@ -275,6 +275,23 @@ class MainActivity : ComponentActivity() {
         currentScreen = destination
         buildUi()
         refreshSavedUserSession()
+        refreshSavedOwnerSession()
+    }
+
+    private fun refreshSavedOwnerSession() {
+        val refresh = SecureTokenStore.read(this, KEY_OWNER_REFRESH_TOKEN) ?: return
+        Thread {
+            val refreshed = runCatching {
+                val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                    ?: throw IllegalStateException("Could not identify this Android device")
+                AssafApiClient.refreshOwnerSession(refresh, deviceId)
+            }
+            refreshed.onSuccess { result ->
+                prefs.edit().putString(KEY_OWNER_API_TOKEN, result.getString("access_token")).apply()
+                val nextRefresh = result.optString("refresh_token")
+                if (nextRefresh.isNotBlank()) SecureTokenStore.save(this, KEY_OWNER_REFRESH_TOKEN, nextRefresh)
+            }
+        }.start()
     }
 
     private fun refreshSavedUserSession() {
@@ -1353,6 +1370,9 @@ class MainActivity : ComponentActivity() {
                         result.onSuccess { ownerResult ->
                             val ownerToken = ownerResult.getString("access_token")
                             prefs.edit().putString(KEY_OWNER_API_TOKEN, ownerToken).apply()
+                            ownerResult.optString("refresh_token").takeIf { it.isNotBlank() }?.let {
+                                SecureTokenStore.save(this, KEY_OWNER_REFRESH_TOKEN, it)
+                            }
                             val recoveryCode = ownerResult.optString("recovery_code")
                             if (recoveryCode.isNotBlank()) {
                                 val recoveryView = EditText(this).apply {
@@ -2128,6 +2148,7 @@ ${formatBytes(blockedBytes)}  •  ${packets} حزمة
         private const val KEY_API_TOKEN = "api_access_token"
         private const val KEY_REFRESH_TOKEN = "api_refresh_token"
         private const val KEY_OWNER_API_TOKEN = "owner_api_access_token"
+        private const val KEY_OWNER_REFRESH_TOKEN = "owner_refresh_token"
         private const val KEY_ACCOUNT_EMAIL = "api_account_email"
         private const val KEY_SCHEDULE_ENABLED = "schedule_enabled"
         private const val KEY_START_HOUR = "schedule_start_hour"
