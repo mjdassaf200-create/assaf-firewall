@@ -80,12 +80,34 @@ object AssafApiClient {
             .put("app_version", appVersion))
     }
 
+    private fun signedDeviceProof(email: String, deviceId: String, purpose: String): JSONObject {
+        val challengeResponse = JSONObject(request(
+            "POST",
+            "/v1/auth/challenge",
+            body = JSONObject()
+                .put("email", email.trim())
+                .put("device_id", deviceId)
+                .put("purpose", purpose)
+        ))
+        val challenge = challengeResponse.getString("challenge")
+        return JSONObject()
+            .put("device_public_key", DeviceIdentity.publicKeyBase64())
+            .put("challenge", challenge)
+            .put("signature", DeviceIdentity.signChallenge(challenge))
+    }
+
     fun authenticate(email: String, password: String, register: Boolean, fullName: String = "", whatsappNumber: String = "", deviceId: String): String {
         val path = if (register) "/v1/auth/register" else "/v1/auth/login"
         val body = JSONObject()
             .put("email", email.trim())
             .put("password", password)
             .put("device_id", deviceId)
+        val proof = signedDeviceProof(email, deviceId, "user")
+        val proofKeys = proof.keys()
+        while (proofKeys.hasNext()) {
+            val key = proofKeys.next()
+            body.put(key, proof.get(key))
+        }
         if (register) {
             body.put("full_name", fullName.trim())
             body.put("whatsapp_number", whatsappNumber.trim())
@@ -125,10 +147,18 @@ object AssafApiClient {
             .put("idempotency_key", idempotencyKey)
     ))
 
-    fun authenticateOwner(email: String, password: String): String {
-        val result = JSONObject(request("POST", "/v1/admin/login", body = JSONObject()
-            .put("email", email.trim()).put("password", password)))
-        return result.getString("access_token")
+    fun authenticateOwner(email: String, password: String, deviceId: String): JSONObject {
+        val body = JSONObject()
+            .put("email", email.trim())
+            .put("password", password)
+            .put("device_id", deviceId)
+        val proof = signedDeviceProof(email, deviceId, "owner")
+        val proofKeys = proof.keys()
+        while (proofKeys.hasNext()) {
+            val key = proofKeys.next()
+            body.put(key, proof.get(key))
+        }
+        return JSONObject(request("POST", "/v1/admin/login", body = body))
     }
 
     fun getAdminWallets(token: String): JSONArray =
