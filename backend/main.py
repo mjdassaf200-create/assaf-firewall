@@ -144,6 +144,17 @@ class OwnerDevice(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+class OwnerRefreshSession(Base):
+    __tablename__ = "owner_refresh_sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    device_id_hash: Mapped[str] = mapped_column(String(64), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 class SecurityAudit(Base):
     __tablename__ = "security_audit"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -621,10 +632,18 @@ class TelemetryPing(BaseModel):
     install_id: str = Field(min_length=12, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
     app_version: str = Field(default="unknown", max_length=40)
 
-def owner_token(email: str, device_hash: str) -> TokenResponse:
+def owner_token(email: str, device_hash: str, db: Session) -> TokenResponse:
     expires = datetime.now(timezone.utc) + timedelta(hours=4)
     token = jwt.encode({"sub": "owner:" + email, "email": email, "role": "owner", "device_id_hash": device_hash, "exp": expires}, JWT_SECRET, algorithm="HS256")
-    return TokenResponse(access_token=token, expires_in=4 * 60 * 60)
+    refresh = secrets.token_urlsafe(48)
+    db.add(OwnerRefreshSession(
+        email=email,
+        token_hash=hashlib.sha256(refresh.encode("utf-8")).hexdigest(),
+        device_id_hash=device_hash,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+    ))
+    db.commit()
+    return TokenResponse(access_token=token, expires_in=4 * 60 * 60, refresh_token=refresh)
 
 def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(get_db)) -> dict:
     if credentials is None:
@@ -639,6 +658,36 @@ def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bea
     if device is None or payload.get("device_id_hash") != device.device_id_hash:
         raise HTTPException(status_code=401, detail="Owner session is not bound to the registered owner device")
     return payload
+
+@app.post("/v1/admin/refresh", tags=["owner"])
+def refresh_owner_session(body: RefreshRequest, db: Session = Depends(get_db)):
+    token_hash = hashlib.sha256(body.refresh_token.encode("utf-8")).hexdigest()
+    row = db.scalar(select(OwnerRefreshSession).where(OwnerRefreshSession.token_hash == token_hash))
+    if row is None or row.revoked:
+        raise HTTPException(status_code=401, detail="Owner refresh session is invalid or already used")
+    now = datetime.now(timezone.utc)
+    expiry = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=timezone.utc)
+    if expiry <= now:
+        row.revoked = True
+        db.commit()
+        raise HTTPException(status_code=401, detail="Owner refresh session expired; sign in again")
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    owner_device = db.scalar(select(OwnerDevice).where(OwnerDevice.email == row.email))
+    if owner_device is None or owner_device.device_id_hash != device_hash or row.device_id_hash != device_hash:
+        row.revoked = True
+        db.commit()
+        raise HTTPException(status_code=403, detail="Owner refresh session belongs to a different device")
+    claim = db.execute(
+        update(OwnerRefreshSession)
+        .where(OwnerRefreshSession.id == row.id, OwnerRefreshSession.revoked.is_(False))
+        .values(revoked=True)
+    )
+    if claim.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=401, detail="Owner refresh session was already rotated")
+    db.commit()
+    return owner_token(row.email, device_hash, db)
+
 
 @app.get("/v1/admin/users", tags=["owner"])
 def owner_users(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
@@ -762,9 +811,9 @@ def owner_login(body: OwnerLoginRequest, db: Session = Depends(get_db)):
         db.add(OwnerDevice(email=supplied_email, device_id_hash=device_hash, public_key=public_key, recovery_hash=hashlib.sha256(recovery_code.encode("utf-8")).hexdigest()))
         db.add(SecurityAudit(actor=supplied_email, action="owner_device_enrolled", device_id_hash=device_hash))
         db.commit()
-        token = owner_token(supplied_email, device_hash)
+        token = owner_token(supplied_email, device_hash, db)
         return {"access_token": token.access_token, "token_type": token.token_type, "expires_in": token.expires_in, "recovery_code": recovery_code, "recovery_code_notice": "Save this code offline. It is shown only once."}
-    return owner_token(supplied_email, device_hash)
+    return owner_token(supplied_email, device_hash, db)
 
 
 @app.post("/v1/admin/recover-device", tags=["owner"])
@@ -787,7 +836,7 @@ def owner_recover_device(body: OwnerRecoveryRequest, db: Session = Depends(get_d
     existing.updated_at = datetime.now(timezone.utc)
     db.add(SecurityAudit(actor=supplied_email, action="owner_device_recovered", device_id_hash=device_hash))
     db.commit()
-    token = owner_token(supplied_email, device_hash)
+    token = owner_token(supplied_email, device_hash, db)
     return {"access_token": token.access_token, "token_type": token.token_type, "expires_in": token.expires_in, "recovery_code": new_recovery_code, "recovery_code_notice": "New recovery code. Previous code has been invalidated."}
 
 @app.get("/v1/admin/overview", tags=["owner"])
