@@ -145,7 +145,7 @@ class RegisterRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
-    whatsapp_number: str = Field(pattern=r"^\\+[1-9]\\d{7,14}$")
+    whatsapp_number: str = Field(pattern=r"^\+[1-9]\d{7,14}$")
 
 
 class LoginRequest(BaseModel):
