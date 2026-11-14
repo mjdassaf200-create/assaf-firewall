@@ -248,6 +248,7 @@ class MainActivity : ComponentActivity() {
             "link" -> buildLinkScreen()
             "wifi" -> buildWifiScreen()
             "profile" -> buildProfileScreen()
+            "earn" -> buildEarnScreen()
             "plus" -> buildPlusScreen()
             else -> buildHomeScreen()
         }
@@ -994,6 +995,90 @@ class MainActivity : ComponentActivity() {
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(16) })
     }
 
+    private fun buildEarnScreen() {
+        val root = pageRoot(tr("Earn with us", "اكسب معنا"))
+        val balanceCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(24), dp(24), dp(24), dp(24))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(19, 27, 46))
+                cornerRadius = dp(20).toFloat()
+                setStroke(dp(1), Color.rgb(59, 130, 246))
+            }
+        }
+        balanceCard.addView(TextView(this).apply {
+            text = tr("Your current balance", "رصيدك الحالي")
+            textSize = 14f
+            setTextColor(muted)
+            gravity = Gravity.CENTER
+        }, wrap())
+        balanceCard.addView(TextView(this).apply {
+            text = "$0.00"
+            textSize = 32f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(59, 130, 246))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(8))
+        }, wrap())
+        balanceCard.addView(primaryButton(tr("Request payout", "طلب سحب الأرباح")).apply {
+            setOnClickListener {
+                Toast.makeText(this@MainActivity,
+                    tr("Withdrawals are not available yet.", "طلبات السحب غير متاحة حالياً."),
+                    Toast.LENGTH_LONG).show()
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)).apply {
+            topMargin = dp(12)
+        })
+        root.addView(balanceCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(20)
+        })
+
+        val offersCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(18), dp(16), dp(18))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(19, 27, 46))
+                cornerRadius = dp(16).toFloat()
+                setStroke(dp(1), Color.rgb(30, 58, 138))
+            }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                Toast.makeText(this@MainActivity,
+                    tr("Tasks and offers are coming soon.", "المهام والعروض ستتوفر قريباً."),
+                    Toast.LENGTH_LONG).show()
+            }
+        }
+        offersCard.addView(TextView(this).apply {
+            text = "▣"
+            textSize = 28f
+            setTextColor(Color.rgb(59, 130, 246))
+            setPadding(0, 0, dp(14), 0)
+        }, wrap())
+        val offerText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        offerText.addView(TextView(this).apply {
+            text = tr("Quick task list", "قائمة المهام السريعة")
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(white)
+        }, wrap())
+        offerText.addView(TextView(this).apply {
+            text = tr("Complete tasks and earn balance instantly", "أنجز المهام واكسب رصيداً فورياً")
+            textSize = 12f
+            setTextColor(muted)
+            setPadding(0, dp(3), 0, 0)
+        }, wrap())
+        offersCard.addView(offerText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        offersCard.addView(TextView(this).apply {
+            text = "‹"
+            textSize = 25f
+            setTextColor(muted)
+        }, wrap())
+        root.addView(offersCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
     private fun buildPlusScreen() {
         val root = pageRoot(tr("ASSAF Plus", "عساف بلس"))
         root.addView(infoCard(tr(
@@ -1029,7 +1114,8 @@ class MainActivity : ComponentActivity() {
                     },
                     onManageApps = { goTo("apps") },
                     onCheckLinks = { goTo("link") },
-                    onContact = { goTo("contact") }
+                    onContact = { goTo("contact") },
+                    onEarn = { goTo("earn") }
                 )
             }
         }
