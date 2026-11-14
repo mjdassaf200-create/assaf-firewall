@@ -834,6 +834,7 @@ def owner_recover_device(body: OwnerRecoveryRequest, db: Session = Depends(get_d
     existing.public_key = public_key
     existing.recovery_hash = hashlib.sha256(new_recovery_code.encode("utf-8")).hexdigest()
     existing.updated_at = datetime.now(timezone.utc)
+    db.query(OwnerRefreshSession).filter(OwnerRefreshSession.email == supplied_email).update({OwnerRefreshSession.revoked: True}, synchronize_session=False)
     db.add(SecurityAudit(actor=supplied_email, action="owner_device_recovered", device_id_hash=device_hash))
     db.commit()
     token = owner_token(supplied_email, device_hash, db)
