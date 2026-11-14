@@ -527,7 +527,7 @@ class MainActivity : ComponentActivity() {
                     fullNameInput.error = tr("Enter your full name", "أدخل اسمك الكامل")
                     return@setOnClickListener
                 }
-                if (creatingAccount && !Regex("^\\\\+[1-9][0-9]{7,14}$").matches(whatsapp)) {
+                if (creatingAccount && !Regex("^\\+[1-9][0-9]{7,14}$").matches(whatsapp)) {
                     whatsappInput.error = tr("Use international format, e.g. +9705XXXXXXXX", "استخدم الصيغة الدولية، مثال +9705XXXXXXXX")
                     return@setOnClickListener
                 }
