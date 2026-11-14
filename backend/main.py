@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pwdlib import PasswordHash
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, select, inspect
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, select, inspect, update
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.exc import IntegrityError
 
@@ -142,6 +142,15 @@ class OwnerDevice(Base):
     public_key: Mapped[str] = mapped_column(Text)
     recovery_hash: Mapped[str] = mapped_column(String(64))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class SecurityAudit(Base):
+    __tablename__ = "security_audit"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    actor: Mapped[str] = mapped_column(String(320), index=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    device_id_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
 
 Base.metadata.create_all(bind=engine)
@@ -469,7 +478,14 @@ def refresh_user_session(body: RefreshRequest, db: Session = Depends(get_db)):
         row.revoked = True
         db.commit()
         raise HTTPException(status_code=403, detail="Account is unavailable or device binding changed")
-    row.revoked = True
+    claim = db.execute(
+        update(RefreshSession)
+        .where(RefreshSession.id == row.id, RefreshSession.revoked.is_(False))
+        .values(revoked=True)
+    )
+    if claim.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=401, detail="Refresh session was already rotated")
     db.commit()
     return create_token(user, db)
 
@@ -742,6 +758,7 @@ def owner_login(body: OwnerLoginRequest, db: Session = Depends(get_db)):
     if existing is None:
         recovery_code = secrets.token_urlsafe(32)
         db.add(OwnerDevice(email=supplied_email, device_id_hash=device_hash, public_key=public_key, recovery_hash=hashlib.sha256(recovery_code.encode("utf-8")).hexdigest()))
+        db.add(SecurityAudit(actor=supplied_email, action="owner_device_enrolled", device_id_hash=device_hash))
         db.commit()
         token = owner_token(supplied_email, device_hash)
         return {"access_token": token.access_token, "token_type": token.token_type, "expires_in": token.expires_in, "recovery_code": recovery_code, "recovery_code_notice": "Save this code offline. It is shown only once."}
@@ -766,6 +783,7 @@ def owner_recover_device(body: OwnerRecoveryRequest, db: Session = Depends(get_d
     existing.public_key = public_key
     existing.recovery_hash = hashlib.sha256(new_recovery_code.encode("utf-8")).hexdigest()
     existing.updated_at = datetime.now(timezone.utc)
+    db.add(SecurityAudit(actor=supplied_email, action="owner_device_recovered", device_id_hash=device_hash))
     db.commit()
     token = owner_token(supplied_email, device_hash)
     return {"access_token": token.access_token, "token_type": token.token_type, "expires_in": token.expires_in, "recovery_code": new_recovery_code, "recovery_code_notice": "New recovery code. Previous code has been invalidated."}
