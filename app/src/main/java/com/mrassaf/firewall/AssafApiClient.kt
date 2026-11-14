@@ -140,6 +140,13 @@ object AssafApiClient {
     fun getAdminUsers(token: String): JSONArray =
         JSONArray(request("GET", "/v1/admin/users", token))
 
+    fun getAdminUserDetail(token: String, userId: String): JSONObject =
+        JSONObject(request("GET", "/v1/admin/users/" + java.net.URLEncoder.encode(userId, "UTF-8"), token))
+
+    fun setAdminUserBan(token: String, userId: String, banned: Boolean, reason: String = ""): JSONObject =
+        JSONObject(request("PATCH", "/v1/admin/users/" + java.net.URLEncoder.encode(userId, "UTF-8") + "/ban", token,
+            JSONObject().put("banned", banned).put("reason", reason)))
+
     fun addAdminEarning(token: String, userId: String, amountCents: Long, description: String, source: String, externalRef: String): JSONObject =
         JSONObject(request("POST", "/v1/admin/wallets/$userId/earnings", token,
             JSONObject().put("amount_cents", amountCents).put("description", description)
