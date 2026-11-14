@@ -534,17 +534,31 @@ Base.metadata.create_all(bind=engine)
 class OwnerLoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=256)
+    device_id: str = Field(min_length=16, max_length=128)
+    device_public_key: str = Field(min_length=80, max_length=2048)
+    challenge: str = Field(min_length=32, max_length=128)
+    signature: str = Field(min_length=40, max_length=512)
+
+
+class OwnerRecoveryRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=256)
+    recovery_code: str = Field(min_length=24, max_length=128)
+    device_id: str = Field(min_length=16, max_length=128)
+    device_public_key: str = Field(min_length=80, max_length=2048)
+    challenge: str = Field(min_length=32, max_length=128)
+    signature: str = Field(min_length=40, max_length=512)
 
 class TelemetryPing(BaseModel):
     install_id: str = Field(min_length=12, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
     app_version: str = Field(default="unknown", max_length=40)
 
-def owner_token(email: str) -> TokenResponse:
+def owner_token(email: str, device_hash: str) -> TokenResponse:
     expires = datetime.now(timezone.utc) + timedelta(hours=4)
-    token = jwt.encode({"sub": "owner:" + email, "email": email, "role": "owner", "exp": expires}, JWT_SECRET, algorithm="HS256")
+    token = jwt.encode({"sub": "owner:" + email, "email": email, "role": "owner", "device_id_hash": device_hash, "exp": expires}, JWT_SECRET, algorithm="HS256")
     return TokenResponse(access_token=token, expires_in=4 * 60 * 60)
 
-def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
+def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(get_db)) -> dict:
     if credentials is None:
         raise HTTPException(status_code=401, detail="Owner login required")
     try:
@@ -553,6 +567,9 @@ def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bea
         raise HTTPException(status_code=401, detail="Invalid or expired owner session")
     if payload.get("role") != "owner" or not str(payload.get("sub", "")).startswith("owner:"):
         raise HTTPException(status_code=403, detail="Owner access only")
+    device = db.scalar(select(OwnerDevice).where(OwnerDevice.email == payload.get("email")))
+    if device is None or payload.get("device_id_hash") != device.device_id_hash:
+        raise HTTPException(status_code=401, detail="Owner session is not bound to the registered owner device")
     return payload
 
 @app.get("/v1/admin/users", tags=["owner"])
@@ -660,13 +677,48 @@ def owner_decide_support(message_id: str, body: SupportDecision, _owner: dict = 
 
 
 @app.post("/v1/admin/login", tags=["owner"])
-def owner_login(body: OwnerLoginRequest):
+def owner_login(body: OwnerLoginRequest, db: Session = Depends(get_db)):
     if not OWNER_ADMIN_EMAIL or not OWNER_ADMIN_PASSWORD:
         raise HTTPException(status_code=503, detail="Owner login is not configured yet")
     supplied_email = str(body.email).strip().lower()
     if not secrets.compare_digest(supplied_email, OWNER_ADMIN_EMAIL) or not secrets.compare_digest(body.password, OWNER_ADMIN_PASSWORD):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
-    return owner_token(supplied_email)
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    existing = db.scalar(select(OwnerDevice).where(OwnerDevice.email == supplied_email))
+    expected_key = existing.public_key if existing else None
+    public_key = verify_device_proof(db, supplied_email, body.device_id, body.challenge, body.signature, body.device_public_key, purpose="owner", expected_public_key=expected_key)
+    if existing and existing.device_id_hash != device_hash:
+        raise HTTPException(status_code=403, detail="Owner account is already linked to another phone. Use the one-time recovery procedure.")
+    if existing is None:
+        recovery_code = secrets.token_urlsafe(32)
+        db.add(OwnerDevice(email=supplied_email, device_id_hash=device_hash, public_key=public_key, recovery_hash=hashlib.sha256(recovery_code.encode("utf-8")).hexdigest()))
+        db.commit()
+        token = owner_token(supplied_email, device_hash)
+        return {"access_token": token.access_token, "token_type": token.token_type, "expires_in": token.expires_in, "recovery_code": recovery_code, "recovery_code_notice": "Save this code offline. It is shown only once."}
+    return owner_token(supplied_email, device_hash)
+
+
+@app.post("/v1/admin/recover-device", tags=["owner"])
+def owner_recover_device(body: OwnerRecoveryRequest, db: Session = Depends(get_db)):
+    supplied_email = str(body.email).strip().lower()
+    if not OWNER_ADMIN_EMAIL or not OWNER_ADMIN_PASSWORD or not secrets.compare_digest(supplied_email, OWNER_ADMIN_EMAIL) or not secrets.compare_digest(body.password, OWNER_ADMIN_PASSWORD):
+        raise HTTPException(status_code=401, detail="Owner credentials are incorrect")
+    existing = db.scalar(select(OwnerDevice).where(OwnerDevice.email == supplied_email))
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Owner device is not enrolled yet")
+    recovery_hash = hashlib.sha256(body.recovery_code.encode("utf-8")).hexdigest()
+    if not secrets.compare_digest(recovery_hash, existing.recovery_hash):
+        raise HTTPException(status_code=403, detail="Recovery code is invalid or already used")
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    public_key = verify_device_proof(db, supplied_email, body.device_id, body.challenge, body.signature, body.device_public_key, purpose="owner")
+    new_recovery_code = secrets.token_urlsafe(32)
+    existing.device_id_hash = device_hash
+    existing.public_key = public_key
+    existing.recovery_hash = hashlib.sha256(new_recovery_code.encode("utf-8")).hexdigest()
+    existing.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    token = owner_token(supplied_email, device_hash)
+    return {"access_token": token.access_token, "token_type": token.token_type, "expires_in": token.expires_in, "recovery_code": new_recovery_code, "recovery_code_notice": "New recovery code. Previous code has been invalidated."}
 
 @app.get("/v1/admin/overview", tags=["owner"])
 def owner_overview(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
