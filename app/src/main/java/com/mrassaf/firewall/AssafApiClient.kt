@@ -96,7 +96,7 @@ object AssafApiClient {
             .put("signature", DeviceIdentity.signChallenge(challenge))
     }
 
-    fun authenticate(email: String, password: String, register: Boolean, fullName: String = "", whatsappNumber: String = "", deviceId: String): String {
+    fun authenticate(email: String, password: String, register: Boolean, fullName: String = "", whatsappNumber: String = "", deviceId: String): JSONObject {
         val path = if (register) "/v1/auth/register" else "/v1/auth/login"
         val body = JSONObject()
             .put("email", email.trim())
@@ -112,9 +112,13 @@ object AssafApiClient {
             body.put("full_name", fullName.trim())
             body.put("whatsapp_number", whatsappNumber.trim())
         }
-        val result = JSONObject(request("POST", path, body = body))
-        return result.getString("access_token")
+        return JSONObject(request("POST", path, body = body))
     }
+
+    fun refreshUserSession(refreshToken: String, deviceId: String): JSONObject =
+        JSONObject(request("POST", "/v1/auth/refresh", body = JSONObject()
+            .put("refresh_token", refreshToken)
+            .put("device_id", deviceId)))
 
     fun listSettings(token: String): JSONArray = JSONArray(request("GET", "/v1/settings", token))
 
