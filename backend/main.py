@@ -284,6 +284,8 @@ def optional_user(credentials: HTTPAuthorizationCredentials | None = Depends(bea
     user = db.get(User, user_id) if user_id else None
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
+    if not user.device_id_hash or payload.get("device_id_hash") != user.device_id_hash:
+        raise HTTPException(status_code=401, detail="This session is not registered to this device.")
     return user
 
 
