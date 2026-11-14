@@ -1324,7 +1324,7 @@ class MainActivity : ComponentActivity() {
                         val whatsapp = profile?.optString("whatsapp_number").orEmpty()
                         row.addView(TextView(this).apply {
                             text = listOf(fullName, item.optString("email"), if (whatsapp.isNotBlank()) "WhatsApp: $whatsapp" else "WhatsApp: —",
-                                "$" + String.format(Locale.US, "%.2f", item.optLong("balance_cents") / 100.0)).filter { it.isNotBlank() }.joinToString("\\n")
+                                "$" + String.format(Locale.US, "%.2f", item.optLong("balance_cents") / 100.0)).filter { it.isNotBlank() }.joinToString("\n")
                             setTextColor(white); textSize = 11f
                         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                         if (whatsapp.isNotBlank()) {
