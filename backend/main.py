@@ -3,6 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import base64
+import secrets
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from datetime import datetime, timedelta, timezone
 from typing import Generator
 from uuid import uuid4
@@ -14,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pwdlib import PasswordHash
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, select, inspect
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, select, inspect, update
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.exc import IntegrityError
 
@@ -53,6 +57,7 @@ class User(Base):
     full_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     whatsapp_number: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     device_id_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
+    device_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class SupportMessage(Base):
@@ -109,6 +114,56 @@ class Subscription(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+class DeviceChallenge(Base):
+    __tablename__ = "device_challenges"
+    challenge: Mapped[str] = mapped_column(String(128), primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    device_id_hash: Mapped[str] = mapped_column(String(64), index=True)
+    purpose: Mapped[str] = mapped_column(String(20), default="user")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class RefreshSession(Base):
+    __tablename__ = "refresh_sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    device_id_hash: Mapped[str] = mapped_column(String(64), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class OwnerDevice(Base):
+    __tablename__ = "owner_device"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    device_id_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    public_key: Mapped[str] = mapped_column(Text)
+    recovery_hash: Mapped[str] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class OwnerRefreshSession(Base):
+    __tablename__ = "owner_refresh_sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    device_id_hash: Mapped[str] = mapped_column(String(64), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class SecurityAudit(Base):
+    __tablename__ = "security_audit"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    actor: Mapped[str] = mapped_column(String(320), index=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    device_id_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+
 Base.metadata.create_all(bind=engine)
 
 # create_all does not alter existing tables; add new columns and uniqueness safely for existing installs.
@@ -124,6 +179,8 @@ with engine.begin() as _connection:
         _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN whatsapp_number VARCHAR(16)")
     if "device_id_hash" not in _user_columns:
         _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN device_id_hash VARCHAR(64)")
+    if "device_public_key" not in _user_columns:
+        _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN device_public_key TEXT")
     _connection.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_device_id_hash ON users (device_id_hash)")
 
 _support_columns = {column["name"] for column in inspect(engine).get_columns("support_messages")}
@@ -147,24 +204,42 @@ app.add_middleware(
 )
 
 
+class DeviceChallengeRequest(BaseModel):
+    email: EmailStr
+    device_id: str = Field(min_length=16, max_length=128)
+    purpose: str = Field(default="user", pattern=r"^(user|owner)$")
+
+
 class RegisterRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
     whatsapp_number: str = Field(pattern=r"^\+[1-9]\d{7,14}$")
     device_id: str = Field(min_length=16, max_length=128)
+    device_public_key: str = Field(min_length=80, max_length=2048)
+    challenge: str = Field(min_length=32, max_length=128)
+    signature: str = Field(min_length=40, max_length=512)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
     device_id: str = Field(min_length=16, max_length=128)
+    device_public_key: str = Field(min_length=80, max_length=2048)
+    challenge: str = Field(min_length=32, max_length=128)
+    signature: str = Field(min_length=40, max_length=512)
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+    refresh_token: str | None = None
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=32, max_length=256)
+    device_id: str = Field(min_length=16, max_length=128)
 
 
 class UserResponse(BaseModel):
@@ -243,10 +318,44 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def create_token(user: User) -> TokenResponse:
+def verify_device_proof(db: Session, email: str, device_id: str, challenge: str, signature: str, supplied_public_key: str, purpose: str = "user", expected_public_key: str | None = None) -> str:
+    device_hash = hashlib.sha256(device_id.encode("utf-8")).hexdigest()
+    row = db.get(DeviceChallenge, challenge)
+    now = datetime.now(timezone.utc)
+    if row is None or row.email != email.lower() or row.device_id_hash != device_hash or row.purpose != purpose:
+        raise HTTPException(status_code=401, detail="Device security challenge is invalid")
+    expiry = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=timezone.utc)
+    if expiry <= now:
+        db.delete(row)
+        db.commit()
+        raise HTTPException(status_code=401, detail="Device security challenge expired")
+    if expected_public_key and not secrets.compare_digest(expected_public_key, supplied_public_key):
+        raise HTTPException(status_code=403, detail="This account is linked to a different device key")
+    try:
+        der = base64.b64decode(supplied_public_key, validate=True)
+        public_key = serialization.load_der_public_key(der)
+        if not isinstance(public_key, ec.EllipticCurvePublicKey) or public_key.curve.name != "secp256r1":
+            raise ValueError("Unsupported key")
+        public_key.verify(base64.b64decode(signature, validate=True), challenge.encode("utf-8"), ec.ECDSA(hashes.SHA256()))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Device proof could not be verified")
+    db.delete(row)
+    db.commit()
+    return supplied_public_key
+
+
+def create_token(user: User, db: Session) -> TokenResponse:
     expires = datetime.now(timezone.utc) + timedelta(hours=12)
     token = jwt.encode({"sub": user.id, "email": user.email, "device_id_hash": user.device_id_hash, "exp": expires}, JWT_SECRET, algorithm="HS256")
-    return TokenResponse(access_token=token, expires_in=12 * 60 * 60)
+    refresh = secrets.token_urlsafe(48)
+    db.add(RefreshSession(
+        user_id=user.id,
+        token_hash=hashlib.sha256(refresh.encode("utf-8")).hexdigest(),
+        device_id_hash=user.device_id_hash or "",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+    ))
+    db.commit()
+    return TokenResponse(access_token=token, expires_in=12 * 60 * 60, refresh_token=refresh)
 
 
 def current_user(
@@ -306,16 +415,29 @@ def health():
     return {"status": "ok", "service": "assaf-api", "version": APP_VERSION}
 
 
+@app.post("/v1/auth/challenge", tags=["auth"])
+def issue_device_challenge(body: DeviceChallengeRequest, db: Session = Depends(get_db)):
+    email = str(body.email).lower()
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    challenge = secrets.token_urlsafe(48)
+    db.add(DeviceChallenge(challenge=challenge, email=email, device_id_hash=device_hash, purpose=body.purpose, expires_at=datetime.now(timezone.utc) + timedelta(minutes=3)))
+    db.query(DeviceChallenge).filter(DeviceChallenge.expires_at < datetime.now(timezone.utc)).delete(synchronize_session=False)
+    db.commit()
+    return {"challenge": challenge, "expires_in": 180}
+
+
 @app.post("/v1/auth/register", response_model=TokenResponse, status_code=201, tags=["auth"])
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
     email = str(body.email).lower()
     device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    public_key = verify_device_proof(db, email, body.device_id, body.challenge, body.signature, body.device_public_key)
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status_code=409, detail="An account with this email already exists")
     if db.scalar(select(User).where(User.device_id_hash == device_hash)):
         raise HTTPException(status_code=409, detail="This phone already has an ASSAF account. Sign in to your existing account.")
-    user = User(email=email, full_name=body.full_name.strip(), whatsapp_number=body.whatsapp_number, device_id_hash=device_hash, password_hash=password_hash.hash(body.password))
+    user = User(email=email, full_name=body.full_name.strip(), whatsapp_number=body.whatsapp_number, device_id_hash=device_hash, device_public_key=public_key, password_hash=password_hash.hash(body.password))
     db.add(user)
+    db.add(SecurityAudit(actor=email, action="user_device_enrolled", device_id_hash=device_hash))
     db.flush()
     db.add(Subscription(user_id=user.id, plan="free", status="active", provider="none"))
     try:
@@ -324,7 +446,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=409, detail="This phone is already linked to an ASSAF account.")
     db.refresh(user)
-    return create_token(user)
+    return create_token(user, db)
 
 
 @app.post("/v1/auth/login", response_model=TokenResponse, tags=["auth"])
@@ -335,14 +457,50 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
     if user.device_id_hash and user.device_id_hash != device_hash:
         raise HTTPException(status_code=403, detail="This account is linked to another phone. Contact ASSAF owner to request a device change.")
+    public_key = verify_device_proof(db, str(body.email).lower(), body.device_id, body.challenge, body.signature, body.device_public_key, expected_public_key=user.device_public_key)
     if not user.device_id_hash:
         user.device_id_hash = device_hash
+    if not user.device_public_key:
+        user.device_public_key = public_key
+        db.add(SecurityAudit(actor=user.email, action="legacy_user_device_key_enrolled", device_id_hash=device_hash))
         try:
             db.commit()
         except IntegrityError:
             db.rollback()
             raise HTTPException(status_code=403, detail="This phone is already linked to another ASSAF account.")
-    return create_token(user)
+    return create_token(user, db)
+
+
+@app.post("/v1/auth/refresh", response_model=TokenResponse, tags=["auth"])
+def refresh_user_session(body: RefreshRequest, db: Session = Depends(get_db)):
+    token_hash = hashlib.sha256(body.refresh_token.encode("utf-8")).hexdigest()
+    row = db.scalar(select(RefreshSession).where(RefreshSession.token_hash == token_hash))
+    if row is None or row.revoked:
+        raise HTTPException(status_code=401, detail="Refresh session is invalid or already used")
+    now = datetime.now(timezone.utc)
+    expiry = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=timezone.utc)
+    if expiry <= now:
+        row.revoked = True
+        db.commit()
+        raise HTTPException(status_code=401, detail="Refresh session expired; sign in again")
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    if not secrets.compare_digest(device_hash, row.device_id_hash):
+        raise HTTPException(status_code=403, detail="Refresh session belongs to another device")
+    user = db.get(User, row.user_id)
+    if user is None or user.is_banned or user.device_id_hash != device_hash:
+        row.revoked = True
+        db.commit()
+        raise HTTPException(status_code=403, detail="Account is unavailable or device binding changed")
+    claim = db.execute(
+        update(RefreshSession)
+        .where(RefreshSession.id == row.id, RefreshSession.revoked.is_(False))
+        .values(revoked=True)
+    )
+    if claim.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=401, detail="Refresh session was already rotated")
+    db.commit()
+    return create_token(user, db)
 
 
 @app.get("/v1/me", response_model=UserResponse, tags=["auth"])
@@ -455,17 +613,39 @@ Base.metadata.create_all(bind=engine)
 class OwnerLoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=256)
+    device_id: str = Field(min_length=16, max_length=128)
+    device_public_key: str = Field(min_length=80, max_length=2048)
+    challenge: str = Field(min_length=32, max_length=128)
+    signature: str = Field(min_length=40, max_length=512)
+
+
+class OwnerRecoveryRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=256)
+    recovery_code: str = Field(min_length=24, max_length=128)
+    device_id: str = Field(min_length=16, max_length=128)
+    device_public_key: str = Field(min_length=80, max_length=2048)
+    challenge: str = Field(min_length=32, max_length=128)
+    signature: str = Field(min_length=40, max_length=512)
 
 class TelemetryPing(BaseModel):
     install_id: str = Field(min_length=12, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
     app_version: str = Field(default="unknown", max_length=40)
 
-def owner_token(email: str) -> TokenResponse:
+def owner_token(email: str, device_hash: str, db: Session) -> TokenResponse:
     expires = datetime.now(timezone.utc) + timedelta(hours=4)
-    token = jwt.encode({"sub": "owner:" + email, "email": email, "role": "owner", "exp": expires}, JWT_SECRET, algorithm="HS256")
-    return TokenResponse(access_token=token, expires_in=4 * 60 * 60)
+    token = jwt.encode({"sub": "owner:" + email, "email": email, "role": "owner", "device_id_hash": device_hash, "exp": expires}, JWT_SECRET, algorithm="HS256")
+    refresh = secrets.token_urlsafe(48)
+    db.add(OwnerRefreshSession(
+        email=email,
+        token_hash=hashlib.sha256(refresh.encode("utf-8")).hexdigest(),
+        device_id_hash=device_hash,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+    ))
+    db.commit()
+    return TokenResponse(access_token=token, expires_in=4 * 60 * 60, refresh_token=refresh)
 
-def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
+def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(get_db)) -> dict:
     if credentials is None:
         raise HTTPException(status_code=401, detail="Owner login required")
     try:
@@ -474,7 +654,40 @@ def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bea
         raise HTTPException(status_code=401, detail="Invalid or expired owner session")
     if payload.get("role") != "owner" or not str(payload.get("sub", "")).startswith("owner:"):
         raise HTTPException(status_code=403, detail="Owner access only")
+    device = db.scalar(select(OwnerDevice).where(OwnerDevice.email == payload.get("email")))
+    if device is None or payload.get("device_id_hash") != device.device_id_hash:
+        raise HTTPException(status_code=401, detail="Owner session is not bound to the registered owner device")
     return payload
+
+@app.post("/v1/admin/refresh", tags=["owner"])
+def refresh_owner_session(body: RefreshRequest, db: Session = Depends(get_db)):
+    token_hash = hashlib.sha256(body.refresh_token.encode("utf-8")).hexdigest()
+    row = db.scalar(select(OwnerRefreshSession).where(OwnerRefreshSession.token_hash == token_hash))
+    if row is None or row.revoked:
+        raise HTTPException(status_code=401, detail="Owner refresh session is invalid or already used")
+    now = datetime.now(timezone.utc)
+    expiry = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=timezone.utc)
+    if expiry <= now:
+        row.revoked = True
+        db.commit()
+        raise HTTPException(status_code=401, detail="Owner refresh session expired; sign in again")
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    owner_device = db.scalar(select(OwnerDevice).where(OwnerDevice.email == row.email))
+    if owner_device is None or owner_device.device_id_hash != device_hash or row.device_id_hash != device_hash:
+        row.revoked = True
+        db.commit()
+        raise HTTPException(status_code=403, detail="Owner refresh session belongs to a different device")
+    claim = db.execute(
+        update(OwnerRefreshSession)
+        .where(OwnerRefreshSession.id == row.id, OwnerRefreshSession.revoked.is_(False))
+        .values(revoked=True)
+    )
+    if claim.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=401, detail="Owner refresh session was already rotated")
+    db.commit()
+    return owner_token(row.email, device_hash, db)
+
 
 @app.get("/v1/admin/users", tags=["owner"])
 def owner_users(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
@@ -581,13 +794,51 @@ def owner_decide_support(message_id: str, body: SupportDecision, _owner: dict = 
 
 
 @app.post("/v1/admin/login", tags=["owner"])
-def owner_login(body: OwnerLoginRequest):
+def owner_login(body: OwnerLoginRequest, db: Session = Depends(get_db)):
     if not OWNER_ADMIN_EMAIL or not OWNER_ADMIN_PASSWORD:
         raise HTTPException(status_code=503, detail="Owner login is not configured yet")
     supplied_email = str(body.email).strip().lower()
     if not secrets.compare_digest(supplied_email, OWNER_ADMIN_EMAIL) or not secrets.compare_digest(body.password, OWNER_ADMIN_PASSWORD):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
-    return owner_token(supplied_email)
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    existing = db.scalar(select(OwnerDevice).where(OwnerDevice.email == supplied_email))
+    expected_key = existing.public_key if existing else None
+    public_key = verify_device_proof(db, supplied_email, body.device_id, body.challenge, body.signature, body.device_public_key, purpose="owner", expected_public_key=expected_key)
+    if existing and existing.device_id_hash != device_hash:
+        raise HTTPException(status_code=403, detail="Owner account is already linked to another phone. Use the one-time recovery procedure.")
+    if existing is None:
+        recovery_code = secrets.token_urlsafe(32)
+        db.add(OwnerDevice(email=supplied_email, device_id_hash=device_hash, public_key=public_key, recovery_hash=hashlib.sha256(recovery_code.encode("utf-8")).hexdigest()))
+        db.add(SecurityAudit(actor=supplied_email, action="owner_device_enrolled", device_id_hash=device_hash))
+        db.commit()
+        token = owner_token(supplied_email, device_hash, db)
+        return {"access_token": token.access_token, "token_type": token.token_type, "expires_in": token.expires_in, "recovery_code": recovery_code, "recovery_code_notice": "Save this code offline. It is shown only once."}
+    return owner_token(supplied_email, device_hash, db)
+
+
+@app.post("/v1/admin/recover-device", tags=["owner"])
+def owner_recover_device(body: OwnerRecoveryRequest, db: Session = Depends(get_db)):
+    supplied_email = str(body.email).strip().lower()
+    if not OWNER_ADMIN_EMAIL or not OWNER_ADMIN_PASSWORD or not secrets.compare_digest(supplied_email, OWNER_ADMIN_EMAIL) or not secrets.compare_digest(body.password, OWNER_ADMIN_PASSWORD):
+        raise HTTPException(status_code=401, detail="Owner credentials are incorrect")
+    existing = db.scalar(select(OwnerDevice).where(OwnerDevice.email == supplied_email))
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Owner device is not enrolled yet")
+    recovery_hash = hashlib.sha256(body.recovery_code.encode("utf-8")).hexdigest()
+    if not secrets.compare_digest(recovery_hash, existing.recovery_hash):
+        raise HTTPException(status_code=403, detail="Recovery code is invalid or already used")
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    public_key = verify_device_proof(db, supplied_email, body.device_id, body.challenge, body.signature, body.device_public_key, purpose="owner")
+    new_recovery_code = secrets.token_urlsafe(32)
+    existing.device_id_hash = device_hash
+    existing.public_key = public_key
+    existing.recovery_hash = hashlib.sha256(new_recovery_code.encode("utf-8")).hexdigest()
+    existing.updated_at = datetime.now(timezone.utc)
+    db.query(OwnerRefreshSession).filter(OwnerRefreshSession.email == supplied_email).update({OwnerRefreshSession.revoked: True}, synchronize_session=False)
+    db.add(SecurityAudit(actor=supplied_email, action="owner_device_recovered", device_id_hash=device_hash))
+    db.commit()
+    token = owner_token(supplied_email, device_hash, db)
+    return {"access_token": token.access_token, "token_type": token.token_type, "expires_in": token.expires_in, "recovery_code": new_recovery_code, "recovery_code_notice": "New recovery code. Previous code has been invalidated."}
 
 @app.get("/v1/admin/overview", tags=["owner"])
 def owner_overview(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):

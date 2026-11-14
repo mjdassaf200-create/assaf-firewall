@@ -274,6 +274,41 @@ class MainActivity : ComponentActivity() {
         }
         currentScreen = destination
         buildUi()
+        refreshSavedUserSession()
+        refreshSavedOwnerSession()
+    }
+
+    private fun refreshSavedOwnerSession() {
+        val refresh = SecureTokenStore.read(this, KEY_OWNER_REFRESH_TOKEN) ?: return
+        Thread {
+            val refreshed = runCatching {
+                val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                    ?: throw IllegalStateException("Could not identify this Android device")
+                AssafApiClient.refreshOwnerSession(refresh, deviceId)
+            }
+            refreshed.onSuccess { result ->
+                prefs.edit().putString(KEY_OWNER_API_TOKEN, result.getString("access_token")).apply()
+                val nextRefresh = result.optString("refresh_token")
+                if (nextRefresh.isNotBlank()) SecureTokenStore.save(this, KEY_OWNER_REFRESH_TOKEN, nextRefresh)
+            }
+        }.start()
+    }
+
+    private fun refreshSavedUserSession() {
+        val refresh = SecureTokenStore.read(this, KEY_REFRESH_TOKEN) ?: return
+        Thread {
+            val refreshed = runCatching {
+                val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                    ?: throw IllegalStateException("Could not identify this Android device")
+                AssafApiClient.refreshUserSession(refresh, deviceId)
+            }
+            refreshed.onSuccess { result ->
+                val newAccess = result.getString("access_token")
+                val newRefresh = result.optString("refresh_token")
+                prefs.edit().putString(KEY_API_TOKEN, newAccess).apply()
+                if (newRefresh.isNotBlank()) SecureTokenStore.save(this, KEY_REFRESH_TOKEN, newRefresh)
+            }
+        }.start()
     }
 
     private fun loadAppOpenAd() {
@@ -603,8 +638,12 @@ class MainActivity : ComponentActivity() {
                     }
                     runOnUiThread {
                         dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
-                        result.onSuccess { token ->
+                        result.onSuccess { authResult ->
+                            val token = authResult.getString("access_token")
                             prefs.edit().putString(KEY_API_TOKEN, token).putString(KEY_ACCOUNT_EMAIL, email).apply()
+                            authResult.optString("refresh_token").takeIf { it.isNotBlank() }?.let {
+                                SecureTokenStore.save(this, KEY_REFRESH_TOKEN, it)
+                            }
                             refreshBanStatus()
                             if (::cloudStatusText.isInitialized) cloudStatusText.text = tr("Signed in • Cloud sync ready", "تم تسجيل الدخول • المزامنة السحابية جاهزة")
                             Toast.makeText(this, tr("ASSAF account connected", "تم ربط حساب ASSAF"), Toast.LENGTH_LONG).show()
@@ -1301,7 +1340,11 @@ class MainActivity : ComponentActivity() {
         val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), 0, dp(20), 0) }
         val email = EditText(this).apply { hint = tr("Owner email", "بريد المالك"); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS }
         val password = EditText(this).apply { hint = tr("Owner password", "كلمة مرور المالك"); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
-        form.addView(email, wrap()); form.addView(password, wrap())
+        val recovery = EditText(this).apply {
+            hint = tr("Recovery code (only for a lost phone)", "رمز الاستعادة (فقط عند ضياع الهاتف)")
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        form.addView(email, wrap()); form.addView(password, wrap()); form.addView(recovery, wrap())
         AlertDialog.Builder(this).setTitle(tr("Secure owner sign-in", "تسجيل دخول المالك الآمن"))
             .setMessage(tr("Use the OWNER_ADMIN_EMAIL and OWNER_ADMIN_PASSWORD configured on Render. This is separate from a normal ASSAF user account.", "استخدم بيانات OWNER_ADMIN_EMAIL و OWNER_ADMIN_PASSWORD المضبوطة على Render. هذا الدخول منفصل عن حساب المستخدم العادي."))
             .setView(form).setNegativeButton(tr("Cancel", "إلغاء"), null)
@@ -1313,11 +1356,44 @@ class MainActivity : ComponentActivity() {
                     return@setPositiveButton
                 }
                 Thread {
-                    val result = runCatching { AssafApiClient.authenticateOwner(mail, pass) }
+                    val result = runCatching {
+                        val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                            ?: throw IllegalStateException("Could not identify this Android device")
+                        val enteredRecoveryCode = recovery.text.toString().trim()
+                        if (enteredRecoveryCode.isBlank()) {
+                            AssafApiClient.authenticateOwner(mail, pass, deviceId)
+                        } else {
+                            AssafApiClient.recoverOwnerDevice(mail, pass, enteredRecoveryCode, deviceId)
+                        }
+                    }
                     runOnUiThread {
-                        result.onSuccess { ownerToken ->
+                        result.onSuccess { ownerResult ->
+                            val ownerToken = ownerResult.getString("access_token")
                             prefs.edit().putString(KEY_OWNER_API_TOKEN, ownerToken).apply()
-                            buildOwnerWalletScreen()
+                            ownerResult.optString("refresh_token").takeIf { it.isNotBlank() }?.let {
+                                SecureTokenStore.save(this, KEY_OWNER_REFRESH_TOKEN, it)
+                            }
+                            val newRecoveryCode = ownerResult.optString("recovery_code")
+                            if (newRecoveryCode.isNotBlank()) {
+                                val recoveryView = EditText(this).apply {
+                                    setText(newRecoveryCode)
+                                    isSingleLine = false
+                                    setTextIsSelectable(true)
+                                    textSize = 16f
+                                }
+                                AlertDialog.Builder(this)
+                                    .setTitle(tr("Save your owner recovery code", "احفظ رمز استعادة المالك"))
+                                    .setMessage(tr(
+                                        "This code is shown once. Save it somewhere private and offline. Anyone with this code and your owner password may recover the owner device.",
+                                        "هذا الرمز يظهر مرة واحدة فقط. احفظه في مكان خاص وآمن خارج الهاتف. يلزم الرمز مع كلمة مرور المالك لاستعادة الجهاز."
+                                    ))
+                                    .setView(recoveryView)
+                                    .setPositiveButton(tr("I saved it", "حفظته")) { _, _ -> buildOwnerWalletScreen() }
+                                    .setCancelable(false)
+                                    .show()
+                            } else {
+                                buildOwnerWalletScreen()
+                            }
                         }.onFailure {
                             Toast.makeText(this, it.message ?: tr("Owner sign-in failed.", "فشل دخول المالك."), Toast.LENGTH_LONG).show()
                         }
@@ -2070,7 +2146,9 @@ ${formatBytes(blockedBytes)}  •  ${packets} حزمة
         private const val VPN_REQUEST = 901
         private const val KEY_ARABIC = "ui_arabic"
         private const val KEY_API_TOKEN = "api_access_token"
+        private const val KEY_REFRESH_TOKEN = "api_refresh_token"
         private const val KEY_OWNER_API_TOKEN = "owner_api_access_token"
+        private const val KEY_OWNER_REFRESH_TOKEN = "owner_refresh_token"
         private const val KEY_ACCOUNT_EMAIL = "api_account_email"
         private const val KEY_SCHEDULE_ENABLED = "schedule_enabled"
         private const val KEY_START_HOUR = "schedule_start_hour"

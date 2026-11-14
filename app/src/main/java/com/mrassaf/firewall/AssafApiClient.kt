@@ -80,19 +80,45 @@ object AssafApiClient {
             .put("app_version", appVersion))
     }
 
-    fun authenticate(email: String, password: String, register: Boolean, fullName: String = "", whatsappNumber: String = "", deviceId: String): String {
+    private fun signedDeviceProof(email: String, deviceId: String, purpose: String): JSONObject {
+        val challengeResponse = JSONObject(request(
+            "POST",
+            "/v1/auth/challenge",
+            body = JSONObject()
+                .put("email", email.trim())
+                .put("device_id", deviceId)
+                .put("purpose", purpose)
+        ))
+        val challenge = challengeResponse.getString("challenge")
+        return JSONObject()
+            .put("device_public_key", DeviceIdentity.publicKeyBase64())
+            .put("challenge", challenge)
+            .put("signature", DeviceIdentity.signChallenge(challenge))
+    }
+
+    fun authenticate(email: String, password: String, register: Boolean, fullName: String = "", whatsappNumber: String = "", deviceId: String): JSONObject {
         val path = if (register) "/v1/auth/register" else "/v1/auth/login"
         val body = JSONObject()
             .put("email", email.trim())
             .put("password", password)
             .put("device_id", deviceId)
+        val proof = signedDeviceProof(email, deviceId, "user")
+        val proofKeys = proof.keys()
+        while (proofKeys.hasNext()) {
+            val key = proofKeys.next()
+            body.put(key, proof.get(key))
+        }
         if (register) {
             body.put("full_name", fullName.trim())
             body.put("whatsapp_number", whatsappNumber.trim())
         }
-        val result = JSONObject(request("POST", path, body = body))
-        return result.getString("access_token")
+        return JSONObject(request("POST", path, body = body))
     }
+
+    fun refreshUserSession(refreshToken: String, deviceId: String): JSONObject =
+        JSONObject(request("POST", "/v1/auth/refresh", body = JSONObject()
+            .put("refresh_token", refreshToken)
+            .put("device_id", deviceId)))
 
     fun listSettings(token: String): JSONArray = JSONArray(request("GET", "/v1/settings", token))
 
@@ -125,11 +151,39 @@ object AssafApiClient {
             .put("idempotency_key", idempotencyKey)
     ))
 
-    fun authenticateOwner(email: String, password: String): String {
-        val result = JSONObject(request("POST", "/v1/admin/login", body = JSONObject()
-            .put("email", email.trim()).put("password", password)))
-        return result.getString("access_token")
+    fun authenticateOwner(email: String, password: String, deviceId: String): JSONObject {
+        val body = JSONObject()
+            .put("email", email.trim())
+            .put("password", password)
+            .put("device_id", deviceId)
+        val proof = signedDeviceProof(email, deviceId, "owner")
+        val proofKeys = proof.keys()
+        while (proofKeys.hasNext()) {
+            val key = proofKeys.next()
+            body.put(key, proof.get(key))
+        }
+        return JSONObject(request("POST", "/v1/admin/login", body = body))
     }
+
+    fun recoverOwnerDevice(email: String, password: String, recoveryCode: String, deviceId: String): JSONObject {
+        val body = JSONObject()
+            .put("email", email.trim())
+            .put("password", password)
+            .put("recovery_code", recoveryCode.trim())
+            .put("device_id", deviceId)
+        val proof = signedDeviceProof(email, deviceId, "owner")
+        val proofKeys = proof.keys()
+        while (proofKeys.hasNext()) {
+            val key = proofKeys.next()
+            body.put(key, proof.get(key))
+        }
+        return JSONObject(request("POST", "/v1/admin/recover-device", body = body))
+    }
+
+    fun refreshOwnerSession(refreshToken: String, deviceId: String): JSONObject =
+        JSONObject(request("POST", "/v1/admin/refresh", body = JSONObject()
+            .put("refresh_token", refreshToken)
+            .put("device_id", deviceId)))
 
     fun getAdminWallets(token: String): JSONArray =
         JSONArray(request("GET", "/v1/admin/wallets", token))
