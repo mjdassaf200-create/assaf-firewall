@@ -1359,11 +1359,11 @@ class MainActivity : ComponentActivity() {
                     val result = runCatching {
                         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
                             ?: throw IllegalStateException("Could not identify this Android device")
-                        val recoveryCode = recovery.text.toString().trim()
-                        if (recoveryCode.isBlank()) {
+                        val enteredRecoveryCode = recovery.text.toString().trim()
+                        if (enteredRecoveryCode.isBlank()) {
                             AssafApiClient.authenticateOwner(mail, pass, deviceId)
                         } else {
-                            AssafApiClient.recoverOwnerDevice(mail, pass, recoveryCode, deviceId)
+                            AssafApiClient.recoverOwnerDevice(mail, pass, enteredRecoveryCode, deviceId)
                         }
                     }
                     runOnUiThread {
@@ -1373,10 +1373,10 @@ class MainActivity : ComponentActivity() {
                             ownerResult.optString("refresh_token").takeIf { it.isNotBlank() }?.let {
                                 SecureTokenStore.save(this, KEY_OWNER_REFRESH_TOKEN, it)
                             }
-                            val recoveryCode = ownerResult.optString("recovery_code")
-                            if (recoveryCode.isNotBlank()) {
+                            val newRecoveryCode = ownerResult.optString("recovery_code")
+                            if (newRecoveryCode.isNotBlank()) {
                                 val recoveryView = EditText(this).apply {
-                                    setText(recoveryCode)
+                                    setText(newRecoveryCode)
                                     isSingleLine = false
                                     isTextSelectable = true
                                     textSize = 16f
