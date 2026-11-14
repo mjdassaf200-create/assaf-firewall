@@ -274,6 +274,24 @@ class MainActivity : ComponentActivity() {
         }
         currentScreen = destination
         buildUi()
+        refreshSavedUserSession()
+    }
+
+    private fun refreshSavedUserSession() {
+        val refresh = SecureTokenStore.read(this, KEY_REFRESH_TOKEN) ?: return
+        Thread {
+            val refreshed = runCatching {
+                val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                    ?: throw IllegalStateException("Could not identify this Android device")
+                AssafApiClient.refreshUserSession(refresh, deviceId)
+            }
+            refreshed.onSuccess { result ->
+                val newAccess = result.getString("access_token")
+                val newRefresh = result.optString("refresh_token")
+                prefs.edit().putString(KEY_API_TOKEN, newAccess).apply()
+                if (newRefresh.isNotBlank()) SecureTokenStore.save(this, KEY_REFRESH_TOKEN, newRefresh)
+            }
+        }.start()
     }
 
     private fun loadAppOpenAd() {
@@ -603,8 +621,12 @@ class MainActivity : ComponentActivity() {
                     }
                     runOnUiThread {
                         dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
-                        result.onSuccess { token ->
+                        result.onSuccess { authResult ->
+                            val token = authResult.getString("access_token")
                             prefs.edit().putString(KEY_API_TOKEN, token).putString(KEY_ACCOUNT_EMAIL, email).apply()
+                            authResult.optString("refresh_token").takeIf { it.isNotBlank() }?.let {
+                                SecureTokenStore.save(this, KEY_REFRESH_TOKEN, it)
+                            }
                             refreshBanStatus()
                             if (::cloudStatusText.isInitialized) cloudStatusText.text = tr("Signed in • Cloud sync ready", "تم تسجيل الدخول • المزامنة السحابية جاهزة")
                             Toast.makeText(this, tr("ASSAF account connected", "تم ربط حساب ASSAF"), Toast.LENGTH_LONG).show()
@@ -2104,6 +2126,7 @@ ${formatBytes(blockedBytes)}  •  ${packets} حزمة
         private const val VPN_REQUEST = 901
         private const val KEY_ARABIC = "ui_arabic"
         private const val KEY_API_TOKEN = "api_access_token"
+        private const val KEY_REFRESH_TOKEN = "api_refresh_token"
         private const val KEY_OWNER_API_TOKEN = "owner_api_access_token"
         private const val KEY_ACCOUNT_EMAIL = "api_account_email"
         private const val KEY_SCHEDULE_ENABLED = "schedule_enabled"
