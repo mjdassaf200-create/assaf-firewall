@@ -552,7 +552,9 @@ class MainActivity : ComponentActivity() {
                 dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
                 Thread {
                     val result = runCatching {
-                        AssafApiClient.authenticate(email, password, creatingAccount, fullName, whatsapp)
+                        val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                            ?: throw IllegalStateException("Could not identify this Android device")
+                        AssafApiClient.authenticate(email, password, creatingAccount, fullName, whatsapp, deviceId)
                     }
                     runOnUiThread {
                         dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
