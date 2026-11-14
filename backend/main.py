@@ -55,6 +55,13 @@ class User(Base):
     device_id_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
 
 
+class OwnerDevice(Base):
+    __tablename__ = "owner_devices"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    device_id_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 class SupportMessage(Base):
     __tablename__ = "support_messages"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -337,7 +344,19 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     if OWNER_ADMIN_EMAIL and secrets.compare_digest(email, OWNER_ADMIN_EMAIL):
         if not OWNER_ADMIN_PASSWORD or not secrets.compare_digest(body.password, OWNER_ADMIN_PASSWORD):
             raise HTTPException(status_code=401, detail="Email or password is incorrect")
-        return owner_token(email)
+        device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+        owner_device = db.get(OwnerDevice, 1)
+        if owner_device is None:
+            owner_device = OwnerDevice(id=1, device_id_hash=device_hash)
+            db.add(owner_device)
+            try:
+                db.commit()
+            except IntegrityError:
+                db.rollback()
+                owner_device = db.get(OwnerDevice, 1)
+        if owner_device is None or not secrets.compare_digest(owner_device.device_id_hash, device_hash):
+            raise HTTPException(status_code=403, detail="The owner account is registered to another phone. Contact the owner recovery process to replace the device.")
+        return owner_token(email, device_hash)
     user = db.scalar(select(User).where(User.email == email))
     if user is None or not password_hash.verify(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
@@ -469,12 +488,15 @@ class TelemetryPing(BaseModel):
     install_id: str = Field(min_length=12, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
     app_version: str = Field(default="unknown", max_length=40)
 
-def owner_token(email: str) -> TokenResponse:
+def owner_token(email: str, device_id_hash: str | None = None) -> TokenResponse:
     expires = datetime.now(timezone.utc) + timedelta(hours=4)
-    token = jwt.encode({"sub": "owner:" + email, "email": email, "role": "owner", "exp": expires}, JWT_SECRET, algorithm="HS256")
+    claims = {"sub": "owner:" + email, "email": email, "role": "owner", "exp": expires}
+    if device_id_hash:
+        claims["device_id_hash"] = device_id_hash
+    token = jwt.encode(claims, JWT_SECRET, algorithm="HS256")
     return TokenResponse(access_token=token, expires_in=4 * 60 * 60)
 
-def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
+def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(get_db)) -> dict:
     if credentials is None:
         raise HTTPException(status_code=401, detail="Owner login required")
     try:
@@ -483,6 +505,12 @@ def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bea
         raise HTTPException(status_code=401, detail="Invalid or expired owner session")
     if payload.get("role") != "owner" or not str(payload.get("sub", "")).startswith("owner:"):
         raise HTTPException(status_code=403, detail="Owner access only")
+    # Mobile owner sessions are pinned to the first registered owner device.
+    token_device_hash = payload.get("device_id_hash")
+    if token_device_hash:
+        owner_device = db.get(OwnerDevice, 1)
+        if owner_device is None or not secrets.compare_digest(owner_device.device_id_hash, token_device_hash):
+            raise HTTPException(status_code=403, detail="Owner device authorization is no longer valid")
     return payload
 
 @app.get("/v1/admin/users", tags=["owner"])
