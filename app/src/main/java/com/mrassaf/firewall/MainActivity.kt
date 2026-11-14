@@ -1185,9 +1185,10 @@ class MainActivity : ComponentActivity() {
 
     private fun buildOwnerWalletScreen() {
         val root = pageRoot(tr("Owner wallet dashboard", "لوحة إدارة المحفظة"))
-        val token = prefs.getString(KEY_API_TOKEN, null)
+        val token = prefs.getString(KEY_OWNER_API_TOKEN, null)
         if (token.isNullOrBlank()) {
-            root.addView(infoCard(tr("Sign in with the owner account to continue.", "سجّل الدخول بحساب المالك للمتابعة.")), wrap())
+            root.addView(infoCard(tr("Owner sign-in is required for this protected dashboard.", "يلزم تسجيل دخول المالك للوصول إلى هذه اللوحة المحمية.")), wrap())
+            root.addView(primaryButton(tr("Owner sign in", "دخول المالك")).apply { setOnClickListener { showOwnerLoginDialog() } }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(12) })
             return
         }
         val summary = infoCard(tr("Loading owner data…", "جارٍ تحميل بيانات المالك…"))
@@ -1205,8 +1206,37 @@ class MainActivity : ComponentActivity() {
         loadOwnerWalletData(summary, payouts, users)
     }
 
+    private fun showOwnerLoginDialog() {
+        val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), 0, dp(20), 0) }
+        val email = EditText(this).apply { hint = tr("Owner email", "بريد المالك"); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS }
+        val password = EditText(this).apply { hint = tr("Owner password", "كلمة مرور المالك"); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
+        form.addView(email, wrap()); form.addView(password, wrap())
+        AlertDialog.Builder(this).setTitle(tr("Secure owner sign-in", "تسجيل دخول المالك الآمن"))
+            .setMessage(tr("Use the OWNER_ADMIN_EMAIL and OWNER_ADMIN_PASSWORD configured on Render. This is separate from a normal ASSAF user account.", "استخدم بيانات OWNER_ADMIN_EMAIL و OWNER_ADMIN_PASSWORD المضبوطة على Render. هذا الدخول منفصل عن حساب المستخدم العادي."))
+            .setView(form).setNegativeButton(tr("Cancel", "إلغاء"), null)
+            .setPositiveButton(tr("Sign in", "دخول")) { dialog, _ ->
+                val mail = email.text.toString().trim()
+                val pass = password.text.toString()
+                if (mail.isBlank() || pass.isBlank()) {
+                    Toast.makeText(this, tr("Enter owner credentials.", "أدخل بيانات المالك."), Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                Thread {
+                    val result = runCatching { AssafApiClient.authenticateOwner(mail, pass) }
+                    runOnUiThread {
+                        result.onSuccess { ownerToken ->
+                            prefs.edit().putString(KEY_OWNER_API_TOKEN, ownerToken).apply()
+                            buildOwnerWalletScreen()
+                        }.onFailure {
+                            Toast.makeText(this, it.message ?: tr("Owner sign-in failed.", "فشل دخول المالك."), Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.start()
+            }.show()
+    }
+
     private fun loadOwnerWalletData(summary: TextView, payouts: LinearLayout, users: LinearLayout) {
-        val token = prefs.getString(KEY_API_TOKEN, null) ?: return
+        val token = prefs.getString(KEY_OWNER_API_TOKEN, null) ?: return
         Thread {
             val result = runCatching {
                 Pair(AssafApiClient.getAdminWallets(token), AssafApiClient.getAdminPayouts(token))
@@ -1273,7 +1303,7 @@ class MainActivity : ComponentActivity() {
                 if (cents == null || cents <= 0 || desc.length < 3) {
                     Toast.makeText(this, tr("Enter a valid amount and reason.", "أدخل مبلغاً وسبباً صحيحين."), Toast.LENGTH_LONG).show(); return@setPositiveButton
                 }
-                val token = prefs.getString(KEY_API_TOKEN, null) ?: return@setPositiveButton
+                val token = prefs.getString(KEY_OWNER_API_TOKEN, null) ?: return@setPositiveButton
                 Thread {
                     val result = runCatching { AssafApiClient.addAdminEarning(token, userId, cents, desc, "manual", "manual:" + UUID.randomUUID()) }
                     runOnUiThread {
@@ -1285,7 +1315,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun decideOwnerPayout(id: String, status: String, summary: TextView, payouts: LinearLayout, users: LinearLayout) {
-        val token = prefs.getString(KEY_API_TOKEN, null) ?: return
+        val token = prefs.getString(KEY_OWNER_API_TOKEN, null) ?: return
         Thread {
             val result = runCatching { AssafApiClient.decideAdminPayout(token, id, status) }
             runOnUiThread {
@@ -1843,6 +1873,7 @@ ${formatBytes(blockedBytes)}  •  ${packets} حزمة
         private const val VPN_REQUEST = 901
         private const val KEY_ARABIC = "ui_arabic"
         private const val KEY_API_TOKEN = "api_access_token"
+        private const val KEY_OWNER_API_TOKEN = "owner_api_access_token"
         private const val KEY_ACCOUNT_EMAIL = "api_account_email"
         private const val KEY_SCHEDULE_ENABLED = "schedule_enabled"
         private const val KEY_START_HOUR = "schedule_start_hour"
