@@ -3,6 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import base64
+import secrets
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from datetime import datetime, timedelta, timezone
 from typing import Generator
 from uuid import uuid4
@@ -53,6 +57,7 @@ class User(Base):
     full_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     whatsapp_number: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     device_id_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
+    device_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class SupportMessage(Base):
@@ -109,6 +114,25 @@ class Subscription(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+class DeviceChallenge(Base):
+    __tablename__ = "device_challenges"
+    challenge: Mapped[str] = mapped_column(String(128), primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    device_id_hash: Mapped[str] = mapped_column(String(64), index=True)
+    purpose: Mapped[str] = mapped_column(String(20), default="user")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class OwnerDevice(Base):
+    __tablename__ = "owner_device"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    device_id_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    public_key: Mapped[str] = mapped_column(Text)
+    recovery_hash: Mapped[str] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
 Base.metadata.create_all(bind=engine)
 
 # create_all does not alter existing tables; add new columns and uniqueness safely for existing installs.
@@ -124,6 +148,8 @@ with engine.begin() as _connection:
         _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN whatsapp_number VARCHAR(16)")
     if "device_id_hash" not in _user_columns:
         _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN device_id_hash VARCHAR(64)")
+    if "device_public_key" not in _user_columns:
+        _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN device_public_key TEXT")
     _connection.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_device_id_hash ON users (device_id_hash)")
 
 _support_columns = {column["name"] for column in inspect(engine).get_columns("support_messages")}
@@ -147,18 +173,30 @@ app.add_middleware(
 )
 
 
+class DeviceChallengeRequest(BaseModel):
+    email: EmailStr
+    device_id: str = Field(min_length=16, max_length=128)
+    purpose: str = Field(default="user", pattern=r"^(user|owner)$")
+
+
 class RegisterRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
     whatsapp_number: str = Field(pattern=r"^\+[1-9]\d{7,14}$")
     device_id: str = Field(min_length=16, max_length=128)
+    device_public_key: str = Field(min_length=80, max_length=2048)
+    challenge: str = Field(min_length=32, max_length=128)
+    signature: str = Field(min_length=40, max_length=512)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
     device_id: str = Field(min_length=16, max_length=128)
+    device_public_key: str = Field(min_length=80, max_length=2048)
+    challenge: str = Field(min_length=32, max_length=128)
+    signature: str = Field(min_length=40, max_length=512)
 
 
 class TokenResponse(BaseModel):
@@ -243,6 +281,32 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+def verify_device_proof(db: Session, email: str, device_id: str, challenge: str, signature: str, supplied_public_key: str, purpose: str = "user", expected_public_key: str | None = None) -> str:
+    device_hash = hashlib.sha256(device_id.encode("utf-8")).hexdigest()
+    row = db.get(DeviceChallenge, challenge)
+    now = datetime.now(timezone.utc)
+    if row is None or row.email != email.lower() or row.device_id_hash != device_hash or row.purpose != purpose:
+        raise HTTPException(status_code=401, detail="Device security challenge is invalid")
+    expiry = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=timezone.utc)
+    if expiry <= now:
+        db.delete(row)
+        db.commit()
+        raise HTTPException(status_code=401, detail="Device security challenge expired")
+    if expected_public_key and not secrets.compare_digest(expected_public_key, supplied_public_key):
+        raise HTTPException(status_code=403, detail="This account is linked to a different device key")
+    try:
+        der = base64.b64decode(supplied_public_key, validate=True)
+        public_key = serialization.load_der_public_key(der)
+        if not isinstance(public_key, ec.EllipticCurvePublicKey) or public_key.curve.name != "secp256r1":
+            raise ValueError("Unsupported key")
+        public_key.verify(base64.b64decode(signature, validate=True), challenge.encode("utf-8"), ec.ECDSA(hashes.SHA256()))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Device proof could not be verified")
+    db.delete(row)
+    db.commit()
+    return supplied_public_key
+
+
 def create_token(user: User) -> TokenResponse:
     expires = datetime.now(timezone.utc) + timedelta(hours=12)
     token = jwt.encode({"sub": user.id, "email": user.email, "device_id_hash": user.device_id_hash, "exp": expires}, JWT_SECRET, algorithm="HS256")
@@ -306,15 +370,27 @@ def health():
     return {"status": "ok", "service": "assaf-api", "version": APP_VERSION}
 
 
+@app.post("/v1/auth/challenge", tags=["auth"])
+def issue_device_challenge(body: DeviceChallengeRequest, db: Session = Depends(get_db)):
+    email = str(body.email).lower()
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    challenge = secrets.token_urlsafe(48)
+    db.add(DeviceChallenge(challenge=challenge, email=email, device_id_hash=device_hash, purpose=body.purpose, expires_at=datetime.now(timezone.utc) + timedelta(minutes=3)))
+    db.query(DeviceChallenge).filter(DeviceChallenge.expires_at < datetime.now(timezone.utc)).delete(synchronize_session=False)
+    db.commit()
+    return {"challenge": challenge, "expires_in": 180}
+
+
 @app.post("/v1/auth/register", response_model=TokenResponse, status_code=201, tags=["auth"])
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
     email = str(body.email).lower()
     device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    public_key = verify_device_proof(db, email, body.device_id, body.challenge, body.signature, body.device_public_key)
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status_code=409, detail="An account with this email already exists")
     if db.scalar(select(User).where(User.device_id_hash == device_hash)):
         raise HTTPException(status_code=409, detail="This phone already has an ASSAF account. Sign in to your existing account.")
-    user = User(email=email, full_name=body.full_name.strip(), whatsapp_number=body.whatsapp_number, device_id_hash=device_hash, password_hash=password_hash.hash(body.password))
+    user = User(email=email, full_name=body.full_name.strip(), whatsapp_number=body.whatsapp_number, device_id_hash=device_hash, device_public_key=public_key, password_hash=password_hash.hash(body.password))
     db.add(user)
     db.flush()
     db.add(Subscription(user_id=user.id, plan="free", status="active", provider="none"))
@@ -335,8 +411,11 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
     if user.device_id_hash and user.device_id_hash != device_hash:
         raise HTTPException(status_code=403, detail="This account is linked to another phone. Contact ASSAF owner to request a device change.")
+    public_key = verify_device_proof(db, str(body.email).lower(), body.device_id, body.challenge, body.signature, body.device_public_key, expected_public_key=user.device_public_key)
     if not user.device_id_hash:
         user.device_id_hash = device_hash
+    if not user.device_public_key:
+        user.device_public_key = public_key
         try:
             db.commit()
         except IntegrityError:
