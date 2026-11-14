@@ -161,6 +161,21 @@ object AssafApiClient {
         return JSONObject(request("POST", "/v1/admin/login", body = body))
     }
 
+    fun recoverOwnerDevice(email: String, password: String, recoveryCode: String, deviceId: String): JSONObject {
+        val body = JSONObject()
+            .put("email", email.trim())
+            .put("password", password)
+            .put("recovery_code", recoveryCode.trim())
+            .put("device_id", deviceId)
+        val proof = signedDeviceProof(email, deviceId, "owner")
+        val proofKeys = proof.keys()
+        while (proofKeys.hasNext()) {
+            val key = proofKeys.next()
+            body.put(key, proof.get(key))
+        }
+        return JSONObject(request("POST", "/v1/admin/recover-device", body = body))
+    }
+
     fun getAdminWallets(token: String): JSONArray =
         JSONArray(request("GET", "/v1/admin/wallets", token))
 
