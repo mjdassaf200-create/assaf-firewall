@@ -1301,7 +1301,11 @@ class MainActivity : ComponentActivity() {
         val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), 0, dp(20), 0) }
         val email = EditText(this).apply { hint = tr("Owner email", "بريد المالك"); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS }
         val password = EditText(this).apply { hint = tr("Owner password", "كلمة مرور المالك"); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
-        form.addView(email, wrap()); form.addView(password, wrap())
+        val recovery = EditText(this).apply {
+            hint = tr("Recovery code (only for a lost phone)", "رمز الاستعادة (فقط عند ضياع الهاتف)")
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        form.addView(email, wrap()); form.addView(password, wrap()); form.addView(recovery, wrap())
         AlertDialog.Builder(this).setTitle(tr("Secure owner sign-in", "تسجيل دخول المالك الآمن"))
             .setMessage(tr("Use the OWNER_ADMIN_EMAIL and OWNER_ADMIN_PASSWORD configured on Render. This is separate from a normal ASSAF user account.", "استخدم بيانات OWNER_ADMIN_EMAIL و OWNER_ADMIN_PASSWORD المضبوطة على Render. هذا الدخول منفصل عن حساب المستخدم العادي."))
             .setView(form).setNegativeButton(tr("Cancel", "إلغاء"), null)
@@ -1316,7 +1320,12 @@ class MainActivity : ComponentActivity() {
                     val result = runCatching {
                         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
                             ?: throw IllegalStateException("Could not identify this Android device")
-                        AssafApiClient.authenticateOwner(mail, pass, deviceId)
+                        val recoveryCode = recovery.text.toString().trim()
+                        if (recoveryCode.isBlank()) {
+                            AssafApiClient.authenticateOwner(mail, pass, deviceId)
+                        } else {
+                            AssafApiClient.recoverOwnerDevice(mail, pass, recoveryCode, deviceId)
+                        }
                     }
                     runOnUiThread {
                         result.onSuccess { ownerResult ->
