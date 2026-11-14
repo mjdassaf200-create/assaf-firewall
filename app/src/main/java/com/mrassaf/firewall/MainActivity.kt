@@ -998,6 +998,7 @@ class MainActivity : ComponentActivity() {
 
     private fun buildEarnScreen() {
         val root = pageRoot(tr("Earn with us", "اكسب معنا"))
+
         val balanceCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -1008,32 +1009,49 @@ class MainActivity : ComponentActivity() {
                 setStroke(dp(1), Color.rgb(59, 130, 246))
             }
         }
+
         balanceCard.addView(TextView(this).apply {
             text = tr("Your current balance", "رصيدك الحالي")
             textSize = 14f
             setTextColor(muted)
             gravity = Gravity.CENTER
         }, wrap())
+
         balanceCard.addView(TextView(this).apply {
-            text = "\$0.00"
-            textSize = 32f
+            text = tr("Not available yet", "غير متاح حالياً")
+            textSize = 25f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.rgb(59, 130, 246))
             gravity = Gravity.CENTER
             setPadding(0, dp(8), 0, dp(8))
         }, wrap())
+
+        balanceCard.addView(TextView(this).apply {
+            text = tr(
+                "Your real earnings balance will appear here after the rewards wallet is connected.",
+                "سيظهر رصيد أرباحك الحقيقي هنا بعد ربط محفظة الأرباح."
+            )
+            textSize = 12f
+            setTextColor(muted)
+            gravity = Gravity.CENTER
+        }, wrap())
+
         balanceCard.addView(primaryButton(tr("Request payout", "طلب سحب الأرباح")).apply {
+            isEnabled = false
+            alpha = 0.55f
             setOnClickListener {
                 Toast.makeText(this@MainActivity,
-                    tr("Withdrawals are not available yet.", "طلبات السحب غير متاحة حالياً."),
+                    tr("Payout service is not connected yet.", "خدمة السحب غير مربوطة حتى الآن."),
                     Toast.LENGTH_LONG).show()
             }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)).apply {
-            topMargin = dp(12)
+            topMargin = dp(14)
         })
-        root.addView(balanceCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(20)
-        })
+
+        root.addView(balanceCard, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(20) })
 
         val offersCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1047,37 +1065,54 @@ class MainActivity : ComponentActivity() {
             isClickable = true
             isFocusable = true
             setOnClickListener {
-                Toast.makeText(this@MainActivity,
-                    tr("Tasks and offers are coming soon.", "المهام والعروض ستتوفر قريباً."),
-                    Toast.LENGTH_LONG).show()
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle(tr("Tasks and offers", "المهام والعروض"))
+                    .setMessage(tr(
+                        "The rewards provider has not been connected yet. Tasks will appear here after the offerwall and reward verification are configured.",
+                        "لم يتم ربط مزوّد المهام والعروض بعد. ستظهر المهام هنا بعد إعداد منصة العروض والتحقق من المكافآت."
+                    ))
+                    .setPositiveButton(tr("OK", "حسناً"), null)
+                    .show()
             }
         }
+
         offersCard.addView(TextView(this).apply {
             text = "▣"
             textSize = 28f
             setTextColor(Color.rgb(59, 130, 246))
             setPadding(0, 0, dp(14), 0)
         }, wrap())
+
         val offerText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         offerText.addView(TextView(this).apply {
-            text = tr("Quick task list", "قائمة المهام السريعة")
+            text = tr("Daily tasks and offers", "المهام والعروض اليومية")
             textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(white)
         }, wrap())
         offerText.addView(TextView(this).apply {
-            text = tr("Complete tasks and earn balance instantly", "أنجز المهام واكسب رصيداً فورياً")
+            text = tr(
+                "Offers and rewards will be shown here when the service is connected",
+                "ستظهر العروض والمكافآت هنا بعد ربط الخدمة"
+            )
             textSize = 12f
             setTextColor(muted)
             setPadding(0, dp(3), 0, 0)
         }, wrap())
-        offersCard.addView(offerText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+        offersCard.addView(offerText, LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+        ))
         offersCard.addView(TextView(this).apply {
             text = "‹"
             textSize = 25f
             setTextColor(muted)
         }, wrap())
-        root.addView(offersCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        root.addView(offersCard, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
     }
 
     private fun buildPlusScreen() {
