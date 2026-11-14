@@ -95,4 +95,28 @@ object AssafApiClient {
             .put("package_name", packageName)
             .put("blocked", blocked))
     }
+
+    fun getWallet(token: String): JSONObject =
+        JSONObject(request("GET", "/v1/wallet", token))
+
+    fun getWalletTransactions(token: String, limit: Int = 50): JSONArray =
+        JSONArray(request("GET", "/v1/wallet/transactions?limit=" + limit.coerceIn(1, 100), token))
+
+    fun requestPayout(
+        token: String,
+        amountCents: Long,
+        method: String,
+        destination: String,
+        idempotencyKey: String
+    ): JSONObject = JSONObject(request(
+        "POST",
+        "/v1/wallet/payouts",
+        token,
+        JSONObject()
+            .put("amount_cents", amountCents)
+            .put("method", method)
+            .put("destination", destination)
+            .put("idempotency_key", idempotencyKey)
+    ))
+
 }
