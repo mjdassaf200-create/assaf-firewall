@@ -541,6 +541,13 @@ class MainActivity : ComponentActivity() {
         form.addView(whatsappInput, wrap())
         form.addView(emailInput, wrap())
         form.addView(passwordInput, wrap())
+        cloudStatusText = TextView(this).apply {
+            text = ""
+            textSize = 13f
+            setTextColor(muted)
+            setPadding(dp(4), dp(6), dp(4), dp(6))
+        }
+        form.addView(cloudStatusText, wrap())
         form.addView(registerCheck, wrap())
         val dialog = android.app.AlertDialog.Builder(this)
             .setTitle(tr("ASSAF Cloud Account", "حساب ASSAF السحابي"))
