@@ -48,6 +48,8 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     ban_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    whatsapp_number: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
 
 
 class SupportMessage(Base):
@@ -113,6 +115,10 @@ with engine.begin() as _connection:
         _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN is_banned BOOLEAN NOT NULL DEFAULT FALSE")
     if "ban_reason" not in _user_columns:
         _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN ban_reason VARCHAR(500)")
+    if "full_name" not in _user_columns:
+        _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN full_name VARCHAR(120)")
+    if "whatsapp_number" not in _user_columns:
+        _connection.exec_driver_sql("ALTER TABLE users ADD COLUMN whatsapp_number VARCHAR(16)")
 
 _support_columns = {column["name"] for column in inspect(engine).get_columns("support_messages")}
 if "guest_token_hash" not in _support_columns:
@@ -136,8 +142,10 @@ app.add_middleware(
 
 
 class RegisterRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
+    whatsapp_number: str = Field(pattern=r"^\\+[1-9]\\d{7,14}$")
 
 
 class LoginRequest(BaseModel):
@@ -154,6 +162,8 @@ class TokenResponse(BaseModel):
 class UserResponse(BaseModel):
     id: str
     email: EmailStr
+    full_name: str | None = None
+    whatsapp_number: str | None = None
     created_at: datetime
     is_banned: bool = False
     ban_reason: str | None = None
@@ -289,7 +299,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     email = str(body.email).lower()
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status_code=409, detail="An account with this email already exists")
-    user = User(email=email, password_hash=password_hash.hash(body.password))
+    user = User(email=email, full_name=body.full_name.strip(), whatsapp_number=body.whatsapp_number, password_hash=password_hash.hash(body.password))
     db.add(user)
     db.flush()
     db.add(Subscription(user_id=user.id, plan="free", status="active", provider="none"))
@@ -440,7 +450,7 @@ def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bea
 @app.get("/v1/admin/users", tags=["owner"])
 def owner_users(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
     rows = db.scalars(select(User).order_by(User.created_at.desc()).limit(500))
-    return [{"id": row.id, "email": row.email, "created_at": row.created_at.isoformat(), "is_banned": row.is_banned, "ban_reason": row.ban_reason} for row in rows]
+    return [{"id": row.id, "email": row.email, "full_name": row.full_name, "whatsapp_number": row.whatsapp_number, "whatsapp_url": ("https://wa.me/" + row.whatsapp_number.lstrip("+")) if row.whatsapp_number else None, "created_at": row.created_at.isoformat(), "is_banned": row.is_banned, "ban_reason": row.ban_reason} for row in rows]
 
 
 @app.patch("/v1/admin/users/{user_id}/ban", tags=["owner"])
