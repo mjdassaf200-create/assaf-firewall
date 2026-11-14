@@ -606,19 +606,29 @@ class MainActivity : ComponentActivity() {
                     val result = runCatching {
                         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
                             ?: throw IllegalStateException("Could not identify this Android device")
-                        AssafApiClient.authenticate(email, password, creatingAccount, fullName, whatsapp, deviceId)
+                        val token = AssafApiClient.authenticate(email, password, creatingAccount, fullName, whatsapp, deviceId)
+                        // An owner token is accepted by protected admin endpoints only.
+                        val isOwner = !creatingAccount && runCatching { AssafApiClient.getAdminUsers(token); true }.getOrDefault(false)
+                        token to isOwner
                     }
                     runOnUiThread {
                         dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
-                        result.onSuccess { token ->
-                            prefs.edit().putString(KEY_API_TOKEN, token).putString(KEY_ACCOUNT_EMAIL, email).apply()
-                            refreshBanStatus()
-                            if (::cloudStatusText.isInitialized) cloudStatusText.text = tr("Signed in • Cloud sync ready", "تم تسجيل الدخول • المزامنة السحابية جاهزة")
-                            Toast.makeText(this, tr("ASSAF account connected", "تم ربط حساب ASSAF"), Toast.LENGTH_LONG).show()
+                        result.onSuccess { (token, isOwner) ->
+                            if (isOwner) {
+                                prefs.edit().remove(KEY_API_TOKEN).putString(KEY_OWNER_API_TOKEN, token)
+                                    .putString(KEY_ACCOUNT_EMAIL, email).apply()
+                                if (::cloudStatusText.isInitialized) cloudStatusText.text = tr("Owner verified • Opening dashboard", "تم التحقق من المالك • جارٍ فتح لوحة التحكم")
+                            } else {
+                                prefs.edit().remove(KEY_OWNER_API_TOKEN).putString(KEY_API_TOKEN, token)
+                                    .putString(KEY_ACCOUNT_EMAIL, email).apply()
+                                refreshBanStatus()
+                                if (::cloudStatusText.isInitialized) cloudStatusText.text = tr("Signed in • Cloud sync ready", "تم تسجيل الدخول • المزامنة السحابية جاهزة")
+                            }
+                            Toast.makeText(this, if (isOwner) tr("Welcome, ASSAF owner", "أهلاً بك يا مالك ASSAF") else tr("ASSAF account connected", "تم ربط حساب ASSAF"), Toast.LENGTH_LONG).show()
                             dialog.dismiss()
-                            currentScreen = "home"
+                            currentScreen = if (isOwner) "owner_wallet" else "home"
                             buildUi()
-                            syncCloudSettingChanges()
+                            if (!isOwner) syncCloudSettingChanges()
                         }.onFailure {
                             if (::cloudStatusText.isInitialized) cloudStatusText.text = tr("Sign-in failed", "فشل تسجيل الدخول")
                             android.app.AlertDialog.Builder(this)
@@ -1154,11 +1164,6 @@ class MainActivity : ComponentActivity() {
         }
         root.addView(refresh, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(14) })
 
-        root.addView(smallButton().apply {
-            text = tr("Owner wallet dashboard", "لوحة إدارة المحفظة للمالك")
-            setOnClickListener { goTo("owner_wallet") }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(10) })
-
         if (token.isNullOrBlank()) {
             balanceValue.text = tr("Sign in required", "سجّل الدخول أولاً")
             walletStatus.text = tr("Connect your ASSAF account to view your real wallet.", "اربط حساب ASSAF لعرض محفظتك الحقيقية.")
@@ -1285,8 +1290,7 @@ class MainActivity : ComponentActivity() {
         val root = pageRoot(tr("Owner wallet dashboard", "لوحة إدارة المحفظة"))
         val token = prefs.getString(KEY_OWNER_API_TOKEN, null)
         if (token.isNullOrBlank()) {
-            root.addView(infoCard(tr("Owner sign-in is required for this protected dashboard.", "يلزم تسجيل دخول المالك للوصول إلى هذه اللوحة المحمية.")), wrap())
-            root.addView(primaryButton(tr("Owner sign in", "دخول المالك")).apply { setOnClickListener { showOwnerLoginDialog() } }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(12) })
+            root.addView(infoCard(tr("Owner access is restricted. Sign in using the owner email on the regular account screen.", "الوصول محصور بالمالك. سجّل الدخول ببريد المالك من صفحة الحساب العادية.")), wrap())
             return
         }
         val summary = infoCard(tr("Loading owner data…", "جارٍ تحميل بيانات المالك…"))
