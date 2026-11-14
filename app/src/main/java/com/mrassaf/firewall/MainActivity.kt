@@ -67,6 +67,8 @@ import com.google.android.gms.ads.MobileAds
 import android.text.InputType
 import java.util.Locale
 import java.util.UUID
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     private lateinit var listContainer: LinearLayout
@@ -249,6 +251,7 @@ class MainActivity : ComponentActivity() {
             "link" -> buildLinkScreen()
             "wifi" -> buildWifiScreen()
             "profile" -> buildProfileScreen()
+            "owner_wallet" -> buildOwnerWalletScreen()
             "earn" -> buildEarnScreen()
             "plus" -> buildPlusScreen()
             else -> buildHomeScreen()
@@ -998,121 +1001,298 @@ class MainActivity : ComponentActivity() {
 
     private fun buildEarnScreen() {
         val root = pageRoot(tr("Earn with us", "اكسب معنا"))
-
+        val token = prefs.getString(KEY_API_TOKEN, null)
+        val balanceValue = TextView(this).apply {
+            text = tr("Loading…", "جارٍ تحميل الرصيد…")
+            textSize = 27f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(59, 130, 246))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(8))
+        }
+        val walletStatus = TextView(this).apply {
+            text = tr("Your available balance", "رصيدك المتاح")
+            textSize = 13f
+            setTextColor(muted)
+            gravity = Gravity.CENTER
+        }
         val balanceCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(24), dp(24), dp(24), dp(24))
+            setPadding(dp(22), dp(22), dp(22), dp(22))
             background = GradientDrawable().apply {
                 setColor(Color.rgb(19, 27, 46))
                 cornerRadius = dp(20).toFloat()
                 setStroke(dp(1), Color.rgb(59, 130, 246))
             }
         }
-
-        balanceCard.addView(TextView(this).apply {
-            text = tr("Your current balance", "رصيدك الحالي")
-            textSize = 14f
-            setTextColor(muted)
-            gravity = Gravity.CENTER
-        }, wrap())
-
-        balanceCard.addView(TextView(this).apply {
-            text = tr("Not available yet", "غير متاح حالياً")
-            textSize = 25f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.rgb(59, 130, 246))
-            gravity = Gravity.CENTER
-            setPadding(0, dp(8), 0, dp(8))
-        }, wrap())
-
-        balanceCard.addView(TextView(this).apply {
-            text = tr(
-                "Your real earnings balance will appear here after the rewards wallet is connected.",
-                "سيظهر رصيد أرباحك الحقيقي هنا بعد ربط محفظة الأرباح."
-            )
-            textSize = 12f
-            setTextColor(muted)
-            gravity = Gravity.CENTER
-        }, wrap())
-
-        balanceCard.addView(primaryButton(tr("Request payout", "طلب سحب الأرباح")).apply {
+        balanceCard.addView(walletStatus, wrap())
+        balanceCard.addView(balanceValue, wrap())
+        val payoutButton = primaryButton(tr("Request payout", "طلب سحب الأرباح")).apply {
             isEnabled = false
-            alpha = 0.55f
-            setOnClickListener {
-                Toast.makeText(this@MainActivity,
-                    tr("Payout service is not connected yet.", "خدمة السحب غير مربوطة حتى الآن."),
-                    Toast.LENGTH_LONG).show()
-            }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)).apply {
-            topMargin = dp(14)
-        })
-
-        root.addView(balanceCard, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(20) })
-
-        val offersCard = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(18), dp(16), dp(18))
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(19, 27, 46))
-                cornerRadius = dp(16).toFloat()
-                setStroke(dp(1), Color.rgb(30, 58, 138))
-            }
-            isClickable = true
-            isFocusable = true
-            setOnClickListener {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle(tr("Tasks and offers", "المهام والعروض"))
-                    .setMessage(tr(
-                        "The rewards provider has not been connected yet. Tasks will appear here after the offerwall and reward verification are configured.",
-                        "لم يتم ربط مزوّد المهام والعروض بعد. ستظهر المهام هنا بعد إعداد منصة العروض والتحقق من المكافآت."
-                    ))
-                    .setPositiveButton(tr("OK", "حسناً"), null)
-                    .show()
-            }
+            setOnClickListener { showWalletPayoutDialog() }
         }
+        balanceCard.addView(payoutButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)).apply { topMargin = dp(10) })
+        root.addView(balanceCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(16) })
 
-        offersCard.addView(TextView(this).apply {
-            text = "▣"
-            textSize = 28f
-            setTextColor(Color.rgb(59, 130, 246))
-            setPadding(0, 0, dp(14), 0)
-        }, wrap())
-
-        val offerText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        offerText.addView(TextView(this).apply {
-            text = tr("Daily tasks and offers", "المهام والعروض اليومية")
+        root.addView(TextView(this).apply {
+            text = tr("Earnings history", "سجل الأرباح والحركات")
             textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(white)
+            setPadding(0, dp(8), 0, dp(10))
         }, wrap())
-        offerText.addView(TextView(this).apply {
-            text = tr(
-                "Offers and rewards will be shown here when the service is connected",
-                "ستظهر العروض والمكافآت هنا بعد ربط الخدمة"
-            )
-            textSize = 12f
-            setTextColor(muted)
-            setPadding(0, dp(3), 0, 0)
-        }, wrap())
+        val history = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(history, wrap())
 
-        offersCard.addView(offerText, LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+        val offersCard = infoCard(tr(
+            "Tasks and offers will appear after a verified rewards provider is connected. No reward is credited just for viewing or clicking an ad.",
+            "ستظهر المهام والعروض بعد ربط شركة مكافآت موثوقة. لا تتم إضافة أي أرباح لمجرد مشاهدة إعلان أو الضغط عليه."
         ))
-        offersCard.addView(TextView(this).apply {
-            text = "‹"
-            textSize = 25f
-            setTextColor(muted)
-        }, wrap())
+        root.addView(offersCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
 
-        root.addView(offersCard, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        ))
+        val refresh = primaryButton(tr("Refresh wallet", "تحديث المحفظة")).apply {
+            setOnClickListener { loadWalletInto(balanceValue, walletStatus, payoutButton, history) }
+        }
+        root.addView(refresh, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(14) })
+
+        root.addView(smallButton().apply {
+            text = tr("Owner wallet dashboard", "لوحة إدارة المحفظة للمالك")
+            setOnClickListener { goTo("owner_wallet") }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(10) })
+
+        if (token.isNullOrBlank()) {
+            balanceValue.text = tr("Sign in required", "سجّل الدخول أولاً")
+            walletStatus.text = tr("Connect your ASSAF account to view your real wallet.", "اربط حساب ASSAF لعرض محفظتك الحقيقية.")
+            payoutButton.isEnabled = false
+            history.addView(infoCard(tr("No wallet data is shown until you sign in.", "لن نعرض بيانات محفظة قبل تسجيل الدخول.")), wrap())
+        } else {
+            loadWalletInto(balanceValue, walletStatus, payoutButton, history)
+        }
+    }
+
+    private fun loadWalletInto(balance: TextView, status: TextView, payout: Button, history: LinearLayout) {
+        val token = prefs.getString(KEY_API_TOKEN, null)
+        if (token.isNullOrBlank()) {
+            balance.text = tr("Sign in required", "سجّل الدخول أولاً")
+            payout.isEnabled = false
+            return
+        }
+        status.text = tr("Loading wallet…", "جارٍ تحديث المحفظة…")
+        Thread {
+            val result = runCatching {
+                Pair(AssafApiClient.getWallet(token), AssafApiClient.getWalletTransactions(token, 50))
+            }
+            runOnUiThread {
+                if (currentScreen != "earn") return@runOnUiThread
+                result.onSuccess { (wallet, entries) ->
+                    val cents = wallet.optLong("balance_cents", 0L)
+                    balance.text = "$" + String.format(Locale.US, "%.2f", cents / 100.0)
+                    status.text = tr("Available balance • USD", "الرصيد المتاح • دولار أمريكي")
+                    payout.isEnabled = cents > 0L
+                    history.removeAllViews()
+                    if (entries.length() == 0) {
+                        history.addView(infoCard(tr("No earnings yet. Verified rewards will appear here.", "لا توجد أرباح حتى الآن. ستظهر هنا المكافآت التي تم التحقق منها.")), wrap())
+                    } else {
+                        for (index in 0 until entries.length()) {
+                            val item = entries.optJSONObject(index) ?: continue
+                            val row = LinearLayout(this).apply {
+                                orientation = LinearLayout.VERTICAL
+                                setPadding(dp(14), dp(12), dp(14), dp(12))
+                                background = rounded(panel, 14)
+                            }
+                            val amount = item.optLong("amount_cents", 0L)
+                            row.addView(TextView(this).apply {
+                                text = (if (amount >= 0) "+" else "−") + "$" + String.format(Locale.US, "%.2f", kotlin.math.abs(amount) / 100.0)
+                                textSize = 16f
+                                typeface = Typeface.DEFAULT_BOLD
+                                setTextColor(if (amount >= 0) green else Color.rgb(255, 170, 90))
+                            }, wrap())
+                            row.addView(TextView(this).apply {
+                                text = item.optString("description", item.optString("type", ""))
+                                textSize = 13f
+                                setTextColor(white)
+                                setPadding(0, dp(3), 0, 0)
+                            }, wrap())
+                            row.addView(TextView(this).apply {
+                                text = item.optString("created_at", "").replace("T", " ").take(16)
+                                textSize = 10f
+                                setTextColor(muted)
+                                setPadding(0, dp(3), 0, 0)
+                            }, wrap())
+                            history.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
+                        }
+                    }
+                }.onFailure {
+                    balance.text = tr("Unavailable", "تعذر التحميل")
+                    status.text = it.message ?: tr("Check your connection and sign-in.", "تحقق من الاتصال وتسجيل الدخول.")
+                    payout.isEnabled = false
+                    history.removeAllViews()
+                    history.addView(infoCard(tr("Wallet data could not be loaded. No estimated balance is displayed.", "تعذر تحميل المحفظة. لن نعرض رصيداً تقديرياً أو وهمياً.")), wrap())
+                }
+            }
+        }.start()
+    }
+
+    private fun showWalletPayoutDialog() {
+        val token = prefs.getString(KEY_API_TOKEN, null)
+        if (token.isNullOrBlank()) {
+            Toast.makeText(this, tr("Sign in first.", "سجّل الدخول أولاً."), Toast.LENGTH_LONG).show()
+            return
+        }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        val amount = EditText(this).apply {
+            hint = tr("Amount in USD, e.g. 5.00", "المبلغ بالدولار، مثال 5.00")
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        }
+        val destination = EditText(this).apply {
+            hint = tr("Bank / wallet details", "بيانات البنك أو المحفظة")
+        }
+        layout.addView(amount, wrap())
+        layout.addView(destination, wrap())
+        AlertDialog.Builder(this)
+            .setTitle(tr("Payout request", "طلب سحب الأرباح"))
+            .setMessage(tr("This submits a request for review. It does not transfer money automatically.", "هذا يرسل طلباً للمراجعة ولا يحوّل الأموال تلقائياً."))
+            .setView(layout)
+            .setNegativeButton(tr("Cancel", "إلغاء"), null)
+            .setPositiveButton(tr("Send request", "إرسال الطلب")) { _, _ ->
+                val value = amount.text.toString().trim().toBigDecimalOrNull()
+                val cents = runCatching { value?.movePointRight(2)?.longValueExact() }.getOrNull()
+                val destinationValue = destination.text.toString().trim()
+                if (cents == null || cents <= 0L || destinationValue.length < 4) {
+                    Toast.makeText(this, tr("Enter a valid amount and payout details.", "أدخل مبلغاً صحيحاً وبيانات سحب صالحة."), Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                Thread {
+                    val result = runCatching {
+                        AssafApiClient.requestPayout(token, cents, "manual", destinationValue, UUID.randomUUID().toString())
+                    }
+                    runOnUiThread {
+                        result.onSuccess {
+                            Toast.makeText(this, tr("Payout request submitted for review.", "تم إرسال طلب السحب للمراجعة."), Toast.LENGTH_LONG).show()
+                            buildEarnScreen()
+                        }.onFailure {
+                            Toast.makeText(this, it.message ?: tr("Request failed.", "فشل إرسال الطلب."), Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.start()
+            }
+            .show()
+    }
+
+    private fun buildOwnerWalletScreen() {
+        val root = pageRoot(tr("Owner wallet dashboard", "لوحة إدارة المحفظة"))
+        val token = prefs.getString(KEY_API_TOKEN, null)
+        if (token.isNullOrBlank()) {
+            root.addView(infoCard(tr("Sign in with the owner account to continue.", "سجّل الدخول بحساب المالك للمتابعة.")), wrap())
+            return
+        }
+        val summary = infoCard(tr("Loading owner data…", "جارٍ تحميل بيانات المالك…"))
+        root.addView(summary, wrap())
+        val payouts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(TextView(this).apply { text = tr("Payout requests", "طلبات السحب"); setTextColor(white); textSize = 17f; typeface = Typeface.DEFAULT_BOLD; setPadding(0, dp(18), 0, dp(8)) }, wrap())
+        root.addView(payouts, wrap())
+        val users = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(TextView(this).apply { text = tr("User wallets", "محافظ المستخدمين"); setTextColor(white); textSize = 17f; typeface = Typeface.DEFAULT_BOLD; setPadding(0, dp(18), 0, dp(8)) }, wrap())
+        root.addView(users, wrap())
+        val refresh = primaryButton(tr("Refresh dashboard", "تحديث اللوحة")).apply {
+            setOnClickListener { loadOwnerWalletData(summary, payouts, users) }
+        }
+        root.addView(refresh, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(12) })
+        loadOwnerWalletData(summary, payouts, users)
+    }
+
+    private fun loadOwnerWalletData(summary: TextView, payouts: LinearLayout, users: LinearLayout) {
+        val token = prefs.getString(KEY_API_TOKEN, null) ?: return
+        Thread {
+            val result = runCatching {
+                Pair(AssafApiClient.getAdminWallets(token), AssafApiClient.getAdminPayouts(token))
+            }
+            runOnUiThread {
+                if (currentScreen != "owner_wallet") return@runOnUiThread
+                result.onSuccess { (wallets, requests) ->
+                    val totalUsers = wallets.length()
+                    var totalCents = 0L
+                    for (i in 0 until wallets.length()) totalCents += wallets.optJSONObject(i)?.optLong("balance_cents", 0L) ?: 0L
+                    summary.text = tr("Users: $totalUsers • Total wallet liabilities: ", "المستخدمون: $totalUsers • إجمالي أرصدة المستخدمين: ") + "$" + String.format(Locale.US, "%.2f", totalCents / 100.0)
+                    payouts.removeAllViews()
+                    if (requests.length() == 0) payouts.addView(infoCard(tr("No payout requests.", "لا توجد طلبات سحب.")), wrap())
+                    for (i in 0 until requests.length()) {
+                        val item = requests.optJSONObject(i) ?: continue
+                        val id = item.optString("id")
+                        val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(12), dp(12), dp(12)); background = rounded(panel, 14) }
+                        row.addView(TextView(this).apply {
+                            text = "$" + String.format(Locale.US, "%.2f", item.optLong("amount_cents") / 100.0) + " • " + item.optString("status")
+                            setTextColor(white); textSize = 15f; typeface = Typeface.DEFAULT_BOLD
+                        }, wrap())
+                        row.addView(TextView(this).apply {
+                            text = item.optString("method") + " — " + item.optString("destination") + "\n" + item.optString("user_id")
+                            setTextColor(muted); textSize = 11f
+                        }, wrap())
+                        if (item.optString("status") == "pending") {
+                            val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                            actions.addView(smallButton().apply { text = tr("Mark paid", "تأكيد الدفع"); setOnClickListener { decideOwnerPayout(id, "paid", summary, payouts, users) } }, LinearLayout.LayoutParams(0, dp(42), 1f))
+                            actions.addView(smallButton().apply { text = tr("Reject", "رفض"); setOnClickListener { decideOwnerPayout(id, "rejected", summary, payouts, users) } }, LinearLayout.LayoutParams(0, dp(42), 1f))
+                            row.addView(actions, wrap())
+                        }
+                        payouts.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
+                    }
+                    users.removeAllViews()
+                    for (i in 0 until wallets.length()) {
+                        val item = wallets.optJSONObject(i) ?: continue
+                        val uid = item.optString("user_id")
+                        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10)); background = rounded(panel, 12) }
+                        row.addView(TextView(this).apply {
+                            text = item.optString("email") + "\n$" + String.format(Locale.US, "%.2f", item.optLong("balance_cents") / 100.0)
+                            setTextColor(white); textSize = 12f
+                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        row.addView(smallButton().apply { text = tr("Credit", "إضافة ربح"); setOnClickListener { showOwnerCreditDialog(uid, summary, payouts, users) } }, wrap())
+                        users.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(7) })
+                    }
+                }.onFailure {
+                    summary.text = tr("Owner access denied or service unavailable: ", "تعذر الوصول للوحة المالك أو الخدمة غير متاحة: ") + (it.message ?: "")
+                    payouts.removeAllViews(); users.removeAllViews()
+                }
+            }
+        }.start()
+    }
+
+    private fun showOwnerCreditDialog(userId: String, summary: TextView, payouts: LinearLayout, users: LinearLayout) {
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), 0, dp(18), 0) }
+        val amount = EditText(this).apply { hint = tr("Amount USD", "المبلغ بالدولار"); inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL }
+        val description = EditText(this).apply { hint = tr("Reason / task name", "سبب إضافة الربح أو اسم المهمة") }
+        layout.addView(amount, wrap()); layout.addView(description, wrap())
+        AlertDialog.Builder(this).setTitle(tr("Credit user wallet", "إضافة رصيد للمستخدم")).setView(layout)
+            .setNegativeButton(tr("Cancel", "إلغاء"), null)
+            .setPositiveButton(tr("Confirm credit", "تأكيد الإضافة")) { _, _ ->
+                val cents = runCatching { amount.text.toString().toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()
+                val desc = description.text.toString().trim()
+                if (cents == null || cents <= 0 || desc.length < 3) {
+                    Toast.makeText(this, tr("Enter a valid amount and reason.", "أدخل مبلغاً وسبباً صحيحين."), Toast.LENGTH_LONG).show(); return@setPositiveButton
+                }
+                val token = prefs.getString(KEY_API_TOKEN, null) ?: return@setPositiveButton
+                Thread {
+                    val result = runCatching { AssafApiClient.addAdminEarning(token, userId, cents, desc, "manual", "manual:" + UUID.randomUUID()) }
+                    runOnUiThread {
+                        result.onSuccess { loadOwnerWalletData(summary, payouts, users) }
+                            .onFailure { Toast.makeText(this, it.message ?: "Error", Toast.LENGTH_LONG).show() }
+                    }
+                }.start()
+            }.show()
+    }
+
+    private fun decideOwnerPayout(id: String, status: String, summary: TextView, payouts: LinearLayout, users: LinearLayout) {
+        val token = prefs.getString(KEY_API_TOKEN, null) ?: return
+        Thread {
+            val result = runCatching { AssafApiClient.decideAdminPayout(token, id, status) }
+            runOnUiThread {
+                result.onSuccess { loadOwnerWalletData(summary, payouts, users) }
+                    .onFailure { Toast.makeText(this, it.message ?: "Error", Toast.LENGTH_LONG).show() }
+            }
+        }.start()
     }
 
     private fun buildPlusScreen() {
