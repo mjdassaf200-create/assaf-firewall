@@ -559,12 +559,14 @@ class MainActivity : ComponentActivity() {
                         result.onSuccess { token ->
                             prefs.edit().putString(KEY_API_TOKEN, token).putString(KEY_ACCOUNT_EMAIL, email).apply()
                             refreshBanStatus()
-                            cloudStatusText.text = tr("Signed in • Cloud sync ready", "تم تسجيل الدخول • المزامنة السحابية جاهزة")
+                            if (::cloudStatusText.isInitialized) cloudStatusText.text = tr("Signed in • Cloud sync ready", "تم تسجيل الدخول • المزامنة السحابية جاهزة")
                             Toast.makeText(this, tr("ASSAF account connected", "تم ربط حساب ASSAF"), Toast.LENGTH_LONG).show()
                             dialog.dismiss()
+                            currentScreen = "home"
+                            buildUi()
                             syncCloudSettingChanges()
                         }.onFailure {
-                            cloudStatusText.text = tr("Sign-in failed", "فشل تسجيل الدخول")
+                            if (::cloudStatusText.isInitialized) cloudStatusText.text = tr("Sign-in failed", "فشل تسجيل الدخول")
                             android.app.AlertDialog.Builder(this)
                                 .setTitle(tr("Could not connect", "تعذر الاتصال"))
                                 .setMessage(it.message ?: tr("Please try again.", "حاول مرة أخرى."))
