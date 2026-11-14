@@ -426,6 +426,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="This phone already has an ASSAF account. Sign in to your existing account.")
     user = User(email=email, full_name=body.full_name.strip(), whatsapp_number=body.whatsapp_number, device_id_hash=device_hash, device_public_key=public_key, password_hash=password_hash.hash(body.password))
     db.add(user)
+    db.add(SecurityAudit(actor=email, action="user_device_enrolled", device_id_hash=device_hash))
     db.flush()
     db.add(Subscription(user_id=user.id, plan="free", status="active", provider="none"))
     try:
@@ -450,6 +451,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         user.device_id_hash = device_hash
     if not user.device_public_key:
         user.device_public_key = public_key
+        db.add(SecurityAudit(actor=user.email, action="legacy_user_device_key_enrolled", device_id_hash=device_hash))
         try:
             db.commit()
         except IntegrityError:
