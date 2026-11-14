@@ -20,9 +20,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install backend dependencies
-        run: python -m pip install -r backend/requirements.txt
+        run: python -m pip install -r backend/requirements.txt pytest
       - name: Compile backend
         run: python -m compileall -q backend
+      - name: Run device security tests
+        run: python -m pytest -q backend/tests
 
   android-debug-apk:
     runs-on: ubuntu-latest
