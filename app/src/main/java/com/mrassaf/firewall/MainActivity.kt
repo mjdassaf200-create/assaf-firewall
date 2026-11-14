@@ -47,6 +47,8 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.ArrayAdapter
+import android.widget.Spinner
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -66,6 +68,9 @@ import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.MobileAds
 import android.text.InputType
 import java.util.Locale
+import com.google.i18n.phonenumbers.PhoneNumberUtil
+import com.google.i18n.phonenumbers.PhoneNumberUtil.PhoneNumberFormat
+import com.google.i18n.phonenumbers.NumberParseException
 import java.util.UUID
 import org.json.JSONArray
 import org.json.JSONObject
@@ -490,8 +495,24 @@ class MainActivity : ComponentActivity() {
             setSingleLine(true)
             visibility = View.GONE
         }
+        val phoneUtil = PhoneNumberUtil.getInstance()
+        val countryRegions = phoneUtil.supportedRegions
+            .mapNotNull { region ->
+                val callingCode = phoneUtil.getCountryCodeForRegion(region)
+                if (callingCode <= 0) null else Triple(region, callingCode, Locale("", region).getDisplayCountry(Locale.getDefault()))
+            }
+            .sortedWith(compareBy<Triple<String, Int, String>> { if (it.first == "PS") 0 else 1 }.thenBy { it.third })
+        val countryPicker = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                countryRegions.map { (region, code, name) -> "$name (+$code)" }
+            )
+            setSelection(countryRegions.indexOfFirst { it.first == "PS" }.coerceAtLeast(0))
+            visibility = View.GONE
+        }
         val whatsappInput = EditText(this).apply {
-            hint = tr("WhatsApp number with country code, e.g. +9705XXXXXXXX", "رقم واتساب مع مفتاح الدولة، مثال +9705XXXXXXXX")
+            hint = tr("Phone number without country code", "رقم الهاتف بدون مفتاح الدولة")
             inputType = InputType.TYPE_CLASS_PHONE
             setSingleLine(true)
             visibility = View.GONE
@@ -511,10 +532,12 @@ class MainActivity : ComponentActivity() {
             setTextColor(white)
             setOnCheckedChangeListener { _, checked ->
                 fullNameInput.visibility = if (checked) View.VISIBLE else View.GONE
+                countryPicker.visibility = if (checked) View.VISIBLE else View.GONE
                 whatsappInput.visibility = if (checked) View.VISIBLE else View.GONE
             }
         }
         form.addView(fullNameInput, wrap())
+        form.addView(countryPicker, wrap())
         form.addView(whatsappInput, wrap())
         form.addView(emailInput, wrap())
         form.addView(passwordInput, wrap())
@@ -535,14 +558,36 @@ class MainActivity : ComponentActivity() {
                 }
                 val creatingAccount = registerCheck.isChecked
                 val fullName = fullNameInput.text.toString().trim()
-                val whatsapp = whatsappInput.text.toString().trim().replace(" ", "").replace("-", "")
+                var whatsapp = ""
                 if (creatingAccount && fullName.length < 2) {
                     fullNameInput.error = tr("Enter your full name", "أدخل اسمك الكامل")
                     return@setOnClickListener
                 }
-                if (creatingAccount && !Regex("^\\+[1-9][0-9]{7,14}$").matches(whatsapp)) {
-                    whatsappInput.error = tr("Use international format, e.g. +9705XXXXXXXX", "استخدم الصيغة الدولية، مثال +9705XXXXXXXX")
-                    return@setOnClickListener
+                if (creatingAccount) {
+                    val selectedCountry = countryRegions.getOrNull(countryPicker.selectedItemPosition)
+                    val rawPhone = whatsappInput.text.toString().trim()
+                    if (selectedCountry == null || rawPhone.isBlank()) {
+                        whatsappInput.error = tr("Enter your phone number", "أدخل رقم هاتفك")
+                        return@setOnClickListener
+                    }
+                    try {
+                        val parsed = phoneUtil.parse(rawPhone, selectedCountry.first)
+                        if (!phoneUtil.isValidNumber(parsed)) {
+                            whatsappInput.error = tr("Enter a valid number for the selected country", "أدخل رقمًا صحيحًا للدولة المختارة")
+                            return@setOnClickListener
+                        }
+                        whatsapp = phoneUtil.format(parsed, PhoneNumberFormat.E164)
+                        if (!Regex("^\\+[1-9][0-9]{7,14}$").matches(whatsapp)) {
+                            whatsappInput.error = tr("The phone number is not in international format", "تعذر تحويل الرقم إلى الصيغة الدولية")
+                            return@setOnClickListener
+                        }
+                    } catch (_: NumberParseException) {
+                        whatsappInput.error = tr("Check the number and selected country", "تحقق من الرقم والدولة المختارة")
+                        return@setOnClickListener
+                    } catch (_: Exception) {
+                        Toast.makeText(this, tr("Could not validate the phone number", "تعذر التحقق من رقم الهاتف"), Toast.LENGTH_LONG).show()
+                        return@setOnClickListener
+                    }
                 }
                 if (password.length < if (creatingAccount) 10 else 1) {
                     passwordInput.error = tr("Password is too short", "كلمة المرور قصيرة")
