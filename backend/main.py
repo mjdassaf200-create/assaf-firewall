@@ -123,6 +123,17 @@ class DeviceChallenge(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class RefreshSession(Base):
+    __tablename__ = "refresh_sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    device_id_hash: Mapped[str] = mapped_column(String(64), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 class OwnerDevice(Base):
     __tablename__ = "owner_device"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
@@ -203,6 +214,12 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+    refresh_token: str | None = None
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=32, max_length=256)
+    device_id: str = Field(min_length=16, max_length=128)
 
 
 class UserResponse(BaseModel):
@@ -307,10 +324,18 @@ def verify_device_proof(db: Session, email: str, device_id: str, challenge: str,
     return supplied_public_key
 
 
-def create_token(user: User) -> TokenResponse:
+def create_token(user: User, db: Session) -> TokenResponse:
     expires = datetime.now(timezone.utc) + timedelta(hours=12)
     token = jwt.encode({"sub": user.id, "email": user.email, "device_id_hash": user.device_id_hash, "exp": expires}, JWT_SECRET, algorithm="HS256")
-    return TokenResponse(access_token=token, expires_in=12 * 60 * 60)
+    refresh = secrets.token_urlsafe(48)
+    db.add(RefreshSession(
+        user_id=user.id,
+        token_hash=hashlib.sha256(refresh.encode("utf-8")).hexdigest(),
+        device_id_hash=user.device_id_hash or "",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+    ))
+    db.commit()
+    return TokenResponse(access_token=token, expires_in=12 * 60 * 60, refresh_token=refresh)
 
 
 def current_user(
@@ -400,7 +425,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=409, detail="This phone is already linked to an ASSAF account.")
     db.refresh(user)
-    return create_token(user)
+    return create_token(user, db)
 
 
 @app.post("/v1/auth/login", response_model=TokenResponse, tags=["auth"])
@@ -421,7 +446,32 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         except IntegrityError:
             db.rollback()
             raise HTTPException(status_code=403, detail="This phone is already linked to another ASSAF account.")
-    return create_token(user)
+    return create_token(user, db)
+
+
+@app.post("/v1/auth/refresh", response_model=TokenResponse, tags=["auth"])
+def refresh_user_session(body: RefreshRequest, db: Session = Depends(get_db)):
+    token_hash = hashlib.sha256(body.refresh_token.encode("utf-8")).hexdigest()
+    row = db.scalar(select(RefreshSession).where(RefreshSession.token_hash == token_hash))
+    if row is None or row.revoked:
+        raise HTTPException(status_code=401, detail="Refresh session is invalid or already used")
+    now = datetime.now(timezone.utc)
+    expiry = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=timezone.utc)
+    if expiry <= now:
+        row.revoked = True
+        db.commit()
+        raise HTTPException(status_code=401, detail="Refresh session expired; sign in again")
+    device_hash = hashlib.sha256(body.device_id.encode("utf-8")).hexdigest()
+    if not secrets.compare_digest(device_hash, row.device_id_hash):
+        raise HTTPException(status_code=403, detail="Refresh session belongs to another device")
+    user = db.get(User, row.user_id)
+    if user is None or user.is_banned or user.device_id_hash != device_hash:
+        row.revoked = True
+        db.commit()
+        raise HTTPException(status_code=403, detail="Account is unavailable or device binding changed")
+    row.revoked = True
+    db.commit()
+    return create_token(user, db)
 
 
 @app.get("/v1/me", response_model=UserResponse, tags=["auth"])
