@@ -119,6 +119,12 @@ object AssafApiClient {
             .put("idempotency_key", idempotencyKey)
     ))
 
+    fun authenticateOwner(email: String, password: String): String {
+        val result = JSONObject(request("POST", "/v1/admin/login", body = JSONObject()
+            .put("email", email.trim()).put("password", password)))
+        return result.getString("access_token")
+    }
+
     fun getAdminWallets(token: String): JSONArray =
         JSONArray(request("GET", "/v1/admin/wallets", token))
 
