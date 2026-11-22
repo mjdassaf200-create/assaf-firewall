@@ -32,6 +32,14 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.TimePickerDialog
 import android.content.Intent
+import android.app.DownloadManager
+import android.content.Context
+import android.database.Cursor
+import android.os.Environment
+import androidx.core.content.FileProvider
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -158,9 +166,133 @@ class MainActivity : ComponentActivity() {
             }
         }
         buildUi()
+        Handler(Looper.getMainLooper()).postDelayed({ checkForAppUpdate() }, 2500L)
         if (currentScreen == "apps") loadApps()
         if (!telemetryPrefs.getBoolean("choice_made", false)) showTelemetryConsent()
     }
+
+
+    // Checks the public update manifest. Installation is always confirmed by Android.
+    private var updateCheckRunning = false
+    private var updateDownloadId = -1L
+    private val updateHandler = Handler(Looper.getMainLooper())
+
+    private fun checkForAppUpdate() {
+        if (updateCheckRunning || isFinishing || isDestroyed) return
+        updateCheckRunning = true
+        Thread {
+            val result = runCatching {
+                val connection = (URL("$"+"UPDATE_API/v1/app/update").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    setRequestProperty("Accept", "application/json")
+                }
+                try {
+                    if (connection.responseCode !in 200..299) throw IllegalStateException("Update check failed")
+                    val body = connection.inputStream.bufferedReader().use { it.readText() }
+                    JSONObject(body)
+                } finally { connection.disconnect() }
+            }
+            runOnUiThread {
+                updateCheckRunning = false
+                result.onSuccess { data ->
+                    val latestCode = data.optInt("version_code", 0)
+                    val apkUrl = data.optString("apk_url", "")
+                    val currentCode = try {
+                        @Suppress("DEPRECATION")
+                        packageManager.getPackageInfo(packageName, 0).versionCode
+                    } catch (_: Exception) { 0 }
+                    if (latestCode > currentCode && apkUrl.startsWith("https://")) {
+                        val latestName = data.optString("version_name", latestCode.toString())
+                        showUpdateDialog(latestName, apkUrl)
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun showUpdateDialog(versionName: String, apkUrl: String) {
+        if (isFinishing || isDestroyed || isUpdateDialogShowing) return
+        isUpdateDialogShowing = true
+        AlertDialog.Builder(this)
+            .setTitle(tr("New ASSAF update", "يتوفر تحديث جديد لـ ASSAF"))
+            .setMessage(tr("Version $versionName is available. Your account and settings will remain on this phone.",
+                "يتوفر الإصدار $versionName. ستبقى بيانات حسابك وإعداداتك على الهاتف."))
+            .setPositiveButton(tr("Download and install", "تحميل وتثبيت")) { _, _ -> downloadAndInstallUpdate(apkUrl) }
+            .setNegativeButton(tr("Later", "لاحقاً"), null)
+            .setOnDismissListener { isUpdateDialogShowing = false }
+            .show()
+    }
+
+    private var isUpdateDialogShowing = false
+
+    private fun downloadAndInstallUpdate(apkUrl: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            Toast.makeText(this, tr("Allow ASSAF to install updates, then tap update again.",
+                "اسمح لـ ASSAF بتثبيت التحديثات، ثم اضغط تحديث مرة أخرى."), Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$"+"packageName")))
+            return
+        }
+        try {
+            val destination = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "assaf-update.apk")
+            if (destination.exists()) destination.delete()
+            val request = DownloadManager.Request(Uri.parse(apkUrl))
+                .setTitle("ASSAF update")
+                .setDescription(tr("Downloading the latest version", "جارٍ تحميل أحدث إصدار"))
+                .setMimeType("application/vnd.android.package-archive")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "assaf-update.apk")
+            val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            updateDownloadId = manager.enqueue(request)
+            Toast.makeText(this, tr("Downloading update…", "جارٍ تحميل التحديث…"), Toast.LENGTH_LONG).show()
+            pollUpdateDownload(manager, destination)
+        } catch (e: Exception) {
+            Toast.makeText(this, tr("Could not start update download", "تعذّر بدء تحميل التحديث"), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun pollUpdateDownload(manager: DownloadManager, destination: File) {
+        updateHandler.postDelayed(object : Runnable {
+            override fun run() {
+                if (isFinishing || isDestroyed || updateDownloadId < 0L) return
+                val cursor = manager.query(DownloadManager.Query().setFilterById(updateDownloadId))
+                cursor.use {
+                    if (it == null || !it.moveToFirst()) return
+                    when (it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
+                        DownloadManager.STATUS_SUCCESSFUL -> {
+                            updateDownloadId = -1L
+                            installDownloadedUpdate(destination)
+                        }
+                        DownloadManager.STATUS_FAILED -> {
+                            updateDownloadId = -1L
+                            Toast.makeText(this@MainActivity, tr("Update download failed. Try again later.",
+                                "فشل تحميل التحديث. حاول مرة أخرى لاحقاً."), Toast.LENGTH_LONG).show()
+                        }
+                        else -> updateHandler.postDelayed(this, 1000L)
+                    }
+                }
+            }
+        }, 1000L)
+    }
+
+    private fun installDownloadedUpdate(apk: File) {
+        if (!apk.exists() || apk.length() < 100_000L) {
+            Toast.makeText(this, tr("Downloaded update file is invalid.", "ملف التحديث الذي تم تحميله غير صالح."), Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            val uri = FileProvider.getUriForFile(this, packageName + ".fileprovider", apk)
+            val install = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(install)
+        } catch (e: Exception) {
+            Toast.makeText(this, tr("Could not open Android installer.", "تعذّر فتح مثبت أندرويد."), Toast.LENGTH_LONG).show()
+        }
+    }
+
 
     private fun showTelemetryConsent() {
         AlertDialog.Builder(this)
@@ -184,6 +316,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        checkForAppUpdate()
         if (appOpenAd != null && !appOpenShownThisLaunch) showAppOpenAd()
         telemetryHandler.removeCallbacks(telemetryTask)
         if (telemetryPrefs.getBoolean("enabled", false) && !accountBanned) telemetryHandler.post(telemetryTask)
@@ -2077,6 +2210,7 @@ ${formatBytes(blockedBytes)}  •  ${packets} حزمة
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
+        private const val UPDATE_API = "https://assaf-firewall-1.onrender.com"
         private const val VPN_REQUEST = 901
         private const val KEY_ARABIC = "ui_arabic"
         private const val KEY_API_TOKEN = "api_access_token"
