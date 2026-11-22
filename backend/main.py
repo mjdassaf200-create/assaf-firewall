@@ -526,7 +526,7 @@ def current_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bea
 @app.get("/v1/admin/users", tags=["owner"])
 def owner_users(_owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
     rows = db.scalars(select(User).order_by(User.created_at.desc()).limit(500))
-    return [{"id": row.id, "email": row.email, "full_name": row.full_name, "whatsapp_number": row.whatsapp_number, "whatsapp_url": ("https://wa.me/" + row.whatsapp_number.lstrip("+")) if row.whatsapp_number else None, "created_at": row.created_at.isoformat(), "is_banned": row.is_banned, "ban_reason": row.ban_reason} for row in rows]
+    return [{"id": row.id, "email": row.email, "full_name": row.full_name, "whatsapp_number": row.whatsapp_number, "whatsapp_url": ("https://wa.me/" + row.whatsapp_number.lstrip("+")) if row.whatsapp_number else None, "created_at": row.created_at.isoformat(), "is_banned": row.is_banned, "ban_reason": row.ban_reason, "device_linked": bool(row.device_id_hash)} for row in rows]
 
 
 @app.patch("/v1/admin/users/{user_id}/ban", tags=["owner"])
@@ -538,6 +538,21 @@ def owner_set_ban(user_id: str, body: BanRequest, _owner: dict = Depends(current
     user.ban_reason = ((body.reason or "").strip()[:500] or None) if body.banned else None
     db.commit()
     return {"id": user.id, "email": user.email, "is_banned": user.is_banned, "ban_reason": user.ban_reason}
+
+
+@app.post("/v1/admin/users/{user_id}/release-device", tags=["owner"])
+def owner_release_user_device(user_id: str, _owner: dict = Depends(current_owner), db: Session = Depends(get_db)):
+    """Release a user account from its lost phone so the same account can be linked to a replacement phone."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.device_id_hash:
+        return {"id": user.id, "email": user.email, "device_linked": False, "released": False}
+    # Clearing this binding immediately invalidates existing JWTs because current_user
+    # compares each token device hash with the current database binding.
+    user.device_id_hash = None
+    db.commit()
+    return {"id": user.id, "email": user.email, "device_linked": False, "released": True}
 
 
 @app.get("/v1/admin/support", tags=["owner"])
