@@ -182,7 +182,7 @@ class MainActivity : ComponentActivity() {
         updateCheckRunning = true
         Thread {
             val result = runCatching {
-                val connection = (URL("$"+"UPDATE_API/v1/app/update").openConnection() as HttpURLConnection).apply {
+                val connection = (URL("${UPDATE_API}/v1/app/update").openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     connectTimeout = 8000
                     readTimeout = 8000
@@ -231,7 +231,7 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
             Toast.makeText(this, tr("Allow ASSAF to install updates, then tap update again.",
                 "اسمح لـ ASSAF بتثبيت التحديثات، ثم اضغط تحديث مرة أخرى."), Toast.LENGTH_LONG).show()
-            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$"+"packageName")))
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${packageName}")))
             return
         }
         try {
