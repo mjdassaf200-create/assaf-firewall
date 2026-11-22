@@ -308,7 +308,17 @@ def root_head():
     return None
 
 
-@app.get("/v1/app/update", tags=["app-update"])\ndef app_update_manifest():\n    """Public update metadata. The APK URL is configured only by the service owner."""\n    return {\n        "version_code": int(os.getenv("ASSAF_UPDATE_VERSION_CODE", "4")),\n        "version_name": os.getenv("ASSAF_UPDATE_VERSION_NAME", "0.4.0"),\n        "apk_url": os.getenv("ASSAF_UPDATE_APK_URL", ""),\n    }\n\n\n@app.get("/health", tags=["system"])
+@app.get("/v1/app/update", tags=["app-update"])
+def app_update_manifest():
+    """Public update metadata. The APK URL is configured only by the service owner."""
+    return {
+        "version_code": int(os.getenv("ASSAF_UPDATE_VERSION_CODE", "4")),
+        "version_name": os.getenv("ASSAF_UPDATE_VERSION_NAME", "0.4.0"),
+        "apk_url": os.getenv("ASSAF_UPDATE_APK_URL", ""),
+    }
+
+
+@app.get("/health", tags=["system"])
 def health():
     return {"status": "ok", "service": "assaf-api", "version": APP_VERSION}
 
